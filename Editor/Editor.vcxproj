@@ -143,6 +143,9 @@
       <Project>{739aabc9-116d-49f9-8575-ac4c347397da}</Project>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\Assets\Shaders\ID.shader" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

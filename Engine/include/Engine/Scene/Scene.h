@@ -1,12 +1,15 @@
 #pragma once
 #include <entt/entt.hpp>
 #include <string>
+#include <memory>
+
 #include "Engine/Scene/Entity.h"
 #include "Engine/Scene/UUID.h"
 
 namespace Engine {
 
     class PerspectiveCamera;
+    class Material; // <-- ADD
 
     class Scene {
     public:
@@ -21,12 +24,14 @@ namespace Engine {
 
         void Clear();
 
-        // ADD:
         Entity FindEntityByUUID(UUID id);
         Entity FindEntityByTag(const std::string& tag);
 
         void OnUpdate(float dt);
         void OnRender(const PerspectiveCamera& camera);
+
+        void OnRenderPicking(const PerspectiveCamera& camera,
+            const std::shared_ptr<Material>& idMaterial);
 
     private:
         entt::registry m_Registry;

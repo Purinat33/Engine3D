@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include <cstdint>   // <-- add
+#include <cstdint>
 
 namespace Engine {
 
@@ -8,24 +8,36 @@ namespace Engine {
     class Shader;
     class VertexArray;
     class PerspectiveCamera;
+    class Material;
 
     class RendererPipeline {
     public:
         RendererPipeline();
-        ~RendererPipeline();   // <-- add (out-of-line)
+        ~RendererPipeline();
 
+        // Scene pass + present (existing flow)
         void BeginFrame(uint32_t width, uint32_t height, const PerspectiveCamera& camera);
-        void EndFrame();
+        void EndFrame(); // Ends scene + presents
 
-        uint32_t GetSceneColorTexture() const;
+        // Picking pass
+        void BeginPickingPass(uint32_t width, uint32_t height, const PerspectiveCamera& camera);
+        void EndPickingPass();
+        uint32_t ReadPickingID(uint32_t mouseX, uint32_t mouseY) const; // mouse coords top-left origin
+
+        std::shared_ptr<Material> GetIDMaterial() const { return m_IDMaterial; }
 
     private:
+        void Present();
         void DrawFullscreen();
 
     private:
         std::unique_ptr<Framebuffer> m_SceneFB;
         std::shared_ptr<Shader> m_ScreenShader;
         std::shared_ptr<VertexArray> m_ScreenQuadVAO;
+
+        std::unique_ptr<Framebuffer> m_IDFB;
+        std::shared_ptr<Shader> m_IDShader;
+        std::shared_ptr<Material> m_IDMaterial;
 
         uint32_t m_Width = 0, m_Height = 0;
     };

@@ -8,8 +8,10 @@
 #include "Engine/Renderer/Shader.h"
 #include "Engine/Renderer/VertexArray.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
+#include "Engine/Renderer/Material.h"
 
 #include <glad/glad.h>
+#include <algorithm>
 
 namespace Engine {
 
@@ -24,36 +26,71 @@ namespace Engine {
         m_Height = height;
 
         if (!m_SceneFB)
-            m_SceneFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height });
+            m_SceneFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height, FramebufferColorFormat::RGBA8 });
         else
             m_SceneFB->Resize(width, height);
 
         if (!m_ScreenShader)
             m_ScreenShader = std::make_shared<Shader>("Assets/Shaders/Screen.shader");
 
-        // Scene pass
         m_SceneFB->Bind();
         RenderCommand::SetViewport(0, 0, width, height);
         RenderCommand::SetClearColor(0.08f, 0.10f, 0.12f, 1.0f);
         RenderCommand::Clear();
 
-        // IMPORTANT: begin scene here
         Renderer::BeginScene(camera);
     }
 
     void RendererPipeline::EndFrame() {
-        // Finish scene draw list into the offscreen framebuffer
         Renderer::EndScene();
+        Present();
+    }
 
-        // Present pass (fullscreen quad)
+    void RendererPipeline::BeginPickingPass(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
+        m_Width = width;
+        m_Height = height;
+
+        if (!m_IDFB)
+            m_IDFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height, FramebufferColorFormat::R32UI });
+        else
+            m_IDFB->Resize(width, height);
+
+        if (!m_IDShader) {
+            m_IDShader = std::make_shared<Shader>("Assets/Shaders/ID.shader");
+            m_IDMaterial = std::make_shared<Material>(m_IDShader);
+            m_IDMaterial->SetColor({ 1,1,1,1 }); // harmless
+        }
+
+        m_IDFB->Bind();
+        RenderCommand::SetViewport(0, 0, width, height);
+
+        // Clear ID buffer to 0 = "no entity"
+        m_IDFB->ClearUInt(0);
+
+        Renderer::BeginScene(camera);
+    }
+
+    void RendererPipeline::EndPickingPass() {
+        Renderer::EndScene();
+    }
+
+    uint32_t RendererPipeline::ReadPickingID(uint32_t mouseX, uint32_t mouseY) const {
+        if (!m_IDFB) return 0;
+
+        // Convert from top-left origin (mouse) to bottom-left (OpenGL)
+        if (mouseX >= m_Width || mouseY >= m_Height) return 0;
+        uint32_t x = mouseX;
+        uint32_t y = (m_Height - 1) - mouseY;
+
+        return m_IDFB->ReadPixelUInt(x, y);
+    }
+
+    void RendererPipeline::Present() {
         Framebuffer::BindDefault();
         RenderCommand::SetViewport(0, 0, m_Width, m_Height);
-
-        // No need to clear color/depth here unless you want; but harmless:
         RenderCommand::SetClearColor(0.f, 0.f, 0.f, 1.f);
         RenderCommand::Clear();
 
-        // Fullscreen should not use depth
         glDisable(GL_DEPTH_TEST);
         DrawFullscreen();
         glEnable(GL_DEPTH_TEST);
@@ -68,10 +105,6 @@ namespace Engine {
 
         m_ScreenQuadVAO->Bind();
         RenderCommand::DrawIndexed(m_ScreenQuadVAO->GetIndexBuffer()->GetCount());
-    }
-
-    uint32_t RendererPipeline::GetSceneColorTexture() const {
-        return m_SceneFB ? m_SceneFB->GetColorAttachmentRendererID() : 0;
     }
 
 } // namespace Engine

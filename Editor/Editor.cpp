@@ -12,6 +12,7 @@
 #include <Engine/Events/Event.h>
 #include <Engine/Events/ApplicationEvent.h>
 #include <Engine/Events/KeyEvent.h>
+#include <Engine/Events/MouseEvent.h>
 
 #include <GLFW/glfw3.h> // for GLFW_KEY_* codes
 
@@ -20,6 +21,9 @@
 
 int main() {
     using namespace Engine;
+
+    float mouseX = 0.f, mouseY = 0.f;
+    uint32_t selectedID = 0;
 
     // Create window (GL context loads in WindowsWindow)
     auto window = Window::Create({ "Engine3D Editor", 1600, 900 });
@@ -65,6 +69,22 @@ int main() {
     window->SetEventCallback([&](Event& e) {
         EventDispatcher d(e);
 
+        d.Dispatch<MouseMovedEvent>([&](MouseMovedEvent& me) {
+            mouseX = me.GetX();
+            mouseY = me.GetY();
+            return false;
+            });
+
+        d.Dispatch<MouseButtonPressedEvent>([&](MouseButtonPressedEvent& mb) {
+            if (mb.GetMouseButton() == 0) { // left click
+                uint32_t id = pipeline.ReadPickingID((uint32_t)mouseX, (uint32_t)mouseY);
+                selectedID = id;
+                std::cout << "[Pick] ID = " << selectedID << "\n";
+                return true;
+            }
+            return false;
+            });
+
         d.Dispatch<WindowCloseEvent>([&](WindowCloseEvent&) {
             running = false;
             return true;
@@ -99,13 +119,16 @@ int main() {
             return false;
             });
 
+
+
         d.Dispatch<KeyReleasedEvent>([&](KeyReleasedEvent& ke) {
             int key = ke.GetKeyCode();
             if (key == GLFW_KEY_LEFT_CONTROL || key == GLFW_KEY_RIGHT_CONTROL)
                 ctrlDown = false;
             return false;
             });
-        });
+        }
+    );
 
     // Timing
     auto last = std::chrono::high_resolution_clock::now();
@@ -120,12 +143,13 @@ int main() {
 
         // Render
         pipeline.BeginFrame(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
+        scene.OnRender(editorCam.GetCamera());              // submits normal materials
+        pipeline.EndFrame();                                // ends + presents
 
-        // Scene submits (no Begin/End inside scene)
-        scene.OnUpdate(dt);
-        scene.OnRender(editorCam.GetCamera());
-
-        pipeline.EndFrame();
+        // Build/refresh picking buffer every frame (simple + reliable)
+        pipeline.BeginPickingPass(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
+        scene.OnRenderPicking(editorCam.GetCamera(), pipeline.GetIDMaterial()); // submits ID material with entity IDs
+        pipeline.EndPickingPass();
         window->OnUpdate();
     }
 

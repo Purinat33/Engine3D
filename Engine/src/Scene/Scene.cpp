@@ -121,4 +121,34 @@ namespace Engine {
         return {};
     }
 
+    static uint32_t ToPickID(Engine::UUID id) {
+        // fold 64 -> 32, keep 0 reserved as "none"
+        uint32_t v = (uint32_t)(id ^ (id >> 32));
+        return v == 0 ? 1u : v;
+    }
+
+    void Scene::OnRenderPicking(const PerspectiveCamera& camera, const std::shared_ptr<Material>& idMaterial) {
+        (void)camera; // pipeline owns BeginScene(camera)
+
+        auto& assets = AssetManager::Get();
+
+        // We need ID + Transform + Mesh
+        auto view = m_Registry.view<IDComponent, TransformComponent, MeshRendererComponent>();
+
+        view.each([&](auto /*entity*/, IDComponent& idc, TransformComponent& tc, MeshRendererComponent& mrc) {
+            if (mrc.Model == InvalidAssetHandle) return;
+
+            auto model = assets.GetModel(mrc.Model);
+            if (!model) return;
+
+            uint32_t pickID = ToPickID(idc.ID);
+            glm::mat4 world = tc.GetTransform();
+
+            for (const auto& sm : model->GetSubMeshes()) {
+                if (!sm.MeshPtr) continue;
+                Renderer::Submit(idMaterial, sm.MeshPtr->GetVertexArray(), world, pickID);
+            }
+            });
+    }
+
 } // namespace Engine

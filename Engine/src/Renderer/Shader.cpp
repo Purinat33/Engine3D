@@ -145,4 +145,9 @@ namespace Engine {
         if (loc != -1) glUniform3f(loc, x, y, z);
     }
 
+    void Shader::SetUInt(const std::string& name, uint32_t value) const {
+        int loc = glGetUniformLocation(m_RendererID, name.c_str());
+        if (loc != -1) glUniform1ui(loc, value);
+    }
+
 } // namespace Engine

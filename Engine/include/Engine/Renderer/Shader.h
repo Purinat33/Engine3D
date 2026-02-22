@@ -9,6 +9,8 @@ namespace Engine {
         // From file (our #type format)
         explicit Shader(const std::string& filepath);
 
+        void SetUInt(const std::string& name, uint32_t value) const;
+
         // From source strings (keep for quick tests)
         Shader(const std::string& name, const std::string& vertexSrc, const std::string& fragmentSrc);
 

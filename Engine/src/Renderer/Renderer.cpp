@@ -25,20 +25,6 @@ namespace Engine {
         s_DrawList.clear();
     }
 
-    void Renderer::Submit(const std::shared_ptr<Material>& material,
-        const std::shared_ptr<VertexArray>& vao,
-        const glm::mat4& model) {
-        // Sort by Shader + VAO (good enough for now)
-        uint64_t key = (uint64_t(material->GetShader()->GetRendererID()) << 32) | uint64_t(vao->GetRendererID());
-
-        DrawCommand cmd;
-        cmd.SortKey = key;
-        cmd.MaterialPtr = material;
-        cmd.VaoPtr = vao;
-        cmd.Model = model;
-        s_DrawList.push_back(std::move(cmd));
-    }
-
     void Renderer::EndScene() {
         std::sort(s_DrawList.begin(), s_DrawList.end(),
             [](const DrawCommand& a, const DrawCommand& b) { return a.SortKey < b.SortKey; });
@@ -53,6 +39,7 @@ namespace Engine {
             shader->Bind();
             shader->SetMat4("u_ViewProjection", glm::value_ptr(s_ViewProjection));
             shader->SetMat4("u_Model", glm::value_ptr(cmd.Model));
+            shader->SetUInt("u_EntityID", cmd.EntityID);
 
             // Default: no texture
             int useTexture0 = 0;
@@ -85,5 +72,31 @@ namespace Engine {
             if (count == 0) continue;
             RenderCommand::DrawIndexed(count);
         }
+
+
     }
+
+    void Renderer::Submit(const std::shared_ptr<Material>& material,
+        const std::shared_ptr<VertexArray>& vao,
+        const glm::mat4& model) {
+        Submit(material, vao, model, 0);
+    }
+
+    void Renderer::Submit(const std::shared_ptr<Material>& material,
+        const std::shared_ptr<VertexArray>& vao,
+        const glm::mat4& model,
+        uint32_t entityID) {
+        uint64_t key = (uint64_t(material->GetShader()->GetRendererID()) << 32) |
+            uint64_t(vao->GetRendererID());
+
+        DrawCommand cmd;
+        cmd.SortKey = key;
+        cmd.MaterialPtr = material;
+        cmd.VaoPtr = vao;
+        cmd.Model = model;
+        cmd.EntityID = entityID;
+
+        s_DrawList.push_back(std::move(cmd));
+    }
+    
 } // namespace Engine
