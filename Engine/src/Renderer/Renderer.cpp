@@ -25,7 +25,8 @@ namespace Engine {
 
     void Renderer::Submit(const std::shared_ptr<Shader>& shader,
         const std::shared_ptr<VertexArray>& vao,
-        const glm::mat4& model) {
+        const glm::mat4& model,
+        const glm::vec4& color) {
         // Sort by ShaderID then VAO ID to reduce binds
         uint64_t key = (uint64_t(shader->GetRendererID()) << 32) | uint64_t(vao->GetRendererID());
 
@@ -34,6 +35,7 @@ namespace Engine {
         cmd.ShaderPtr = shader;
         cmd.VaoPtr = vao;
         cmd.Model = model;
+        cmd.Color = color;
         s_DrawList.push_back(std::move(cmd));
     }
 
@@ -48,6 +50,8 @@ namespace Engine {
             cmd.ShaderPtr->Bind();
             cmd.ShaderPtr->SetMat4("u_ViewProjection", glm::value_ptr(s_ViewProjection));
             cmd.ShaderPtr->SetMat4("u_Model", glm::value_ptr(cmd.Model));
+
+            cmd.ShaderPtr->SetFloat4("u_Color", cmd.Color.r, cmd.Color.g, cmd.Color.b, cmd.Color.a);
 
             cmd.VaoPtr->Bind();
             RenderCommand::DrawIndexed(cmd.VaoPtr->GetIndexBuffer()->GetCount());

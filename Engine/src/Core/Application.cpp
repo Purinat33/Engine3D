@@ -7,6 +7,7 @@
 #include "Engine/Renderer/VertexArray.h"
 #include "Engine/Renderer/Buffer.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
+#include "Engine/Renderer/ShaderLibrary.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -37,27 +38,8 @@ namespace Engine {
         auto ib = std::make_shared<IndexBuffer>(indices, 3);
         vao->SetIndexBuffer(ib);
 
-        const std::string vs = R"(
-        #version 330 core
-        layout(location = 0) in vec3 aPos;
-
-        uniform mat4 u_ViewProjection;
-        uniform mat4 u_Model;
-
-        void main() {
-            gl_Position = u_ViewProjection * u_Model * vec4(aPos, 1.0);
-        }
-    )";
-
-        const std::string fs = R"(
-        #version 330 core
-        out vec4 FragColor;
-        void main() {
-            FragColor = vec4(0.2, 0.8, 0.4, 1.0);
-        }
-    )";
-
-        auto shader = std::make_shared<Shader>(vs, fs);
+        ShaderLibrary shaders;
+        auto shader = shaders.Load("Assets/Shaders/FlatColor.glsl");
 
         PerspectiveCamera camera(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
         camera.SetPosition({ 0.0f, 0.0f, 3.0f });
@@ -70,11 +52,12 @@ namespace Engine {
             Renderer::BeginScene(camera);
 
             glm::mat4 model = glm::mat4(1.0f);
-            Renderer::Submit(shader, vao, model);
+            Renderer::Submit(shader, vao, model, { 0.8f, 0.2f, 0.4f, 1.0f });
 
             // submit a second triangle with a different transform (proves “Submit” works)
             glm::mat4 model2 = glm::translate(glm::mat4(1.0f), glm::vec3(0.8f, 0.0f, 0.0f));
-            Renderer::Submit(shader, vao, model2);
+            Renderer::Submit(shader, vao, model2, { 0.2f, 0.8f, 0.4f, 1.0f });
+            
 
             Renderer::EndScene();
 

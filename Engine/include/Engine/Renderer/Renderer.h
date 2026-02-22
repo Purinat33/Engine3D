@@ -16,7 +16,8 @@ namespace Engine {
         static void BeginScene(const PerspectiveCamera& camera);
         static void Submit(const std::shared_ptr<Shader>& shader,
             const std::shared_ptr<VertexArray>& vao,
-            const glm::mat4& model);
+            const glm::mat4& model,
+            const glm::vec4& color);
         static void EndScene(); // sorts + flushes
 
     private:
@@ -25,6 +26,7 @@ namespace Engine {
             std::shared_ptr<Shader> ShaderPtr;
             std::shared_ptr<VertexArray> VaoPtr;
             glm::mat4 Model{ 1.0f };
+            glm::vec4 Color{ 1.0f };
         };
 
         static void Flush();

@@ -6,19 +6,32 @@ namespace Engine {
 
     class Shader {
     public:
-        Shader(const std::string& vertexSrc, const std::string& fragmentSrc);
+        // From file (our #type format)
+        explicit Shader(const std::string& filepath);
+
+        // From source strings (keep for quick tests)
+        Shader(const std::string& name, const std::string& vertexSrc, const std::string& fragmentSrc);
+
         ~Shader();
+
+        const std::string& GetName() const { return m_Name; }
+        uint32_t GetRendererID() const { return m_RendererID; }
 
         void Bind() const;
 
-        uint32_t GetRendererID() const { return m_RendererID; }
-
-        // value4x4 points to 16 floats (glm::value_ptr(mat))
         void SetMat4(const std::string& name, const float* value4x4) const;
+        void SetFloat4(const std::string& name, float x, float y, float z, float w) const;
 
     private:
         uint32_t CompileStage(uint32_t type, const std::string& src);
+        uint32_t CreateProgram(const std::string& vertexSrc, const std::string& fragmentSrc);
+
+        std::string ReadFile(const std::string& filepath);
+        void ParseShaderFile(const std::string& source, std::string& outVertex, std::string& outFragment);
+
+    private:
         uint32_t m_RendererID = 0;
+        std::string m_Name;
     };
 
 } // namespace Engine
