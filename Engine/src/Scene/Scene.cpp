@@ -82,7 +82,7 @@ namespace Engine {
             sh->SetFloat3("u_LightColor", lightColor.x, lightColor.y, lightColor.z);
         }
 
-        Renderer::BeginScene(camera);
+        /*Renderer::BeginScene(camera);*/
 
         renderView.each([&](auto /*entity*/, TransformComponent& tc, MeshRendererComponent& mrc) {
             if (mrc.Model == InvalidAssetHandle) return;
@@ -98,7 +98,7 @@ namespace Engine {
             }
             });
 
-        Renderer::EndScene();
+        /*Renderer::EndScene();*/
     }
 
     Entity Scene::FindEntityByUUID(UUID id) {

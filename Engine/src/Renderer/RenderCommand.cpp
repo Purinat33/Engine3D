@@ -8,6 +8,14 @@ namespace Engine {
     void RenderCommand::Init() {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
+
+        // Optional but recommended for sane 3D
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        glFrontFace(GL_CCW);
+
+        // Ensure not stuck in wireframe from previous tests
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
     void RenderCommand::SetViewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
@@ -19,7 +27,7 @@ namespace Engine {
     }
 
     void RenderCommand::Clear() {
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     }
 
     void RenderCommand::DrawIndexed(uint32_t indexCount) {

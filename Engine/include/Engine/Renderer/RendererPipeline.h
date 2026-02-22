@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <cstdint>   // <-- add
 
 namespace Engine {
 
@@ -11,12 +12,11 @@ namespace Engine {
     class RendererPipeline {
     public:
         RendererPipeline();
+        ~RendererPipeline();   // <-- add (out-of-line)
 
-        // Called every frame
         void BeginFrame(uint32_t width, uint32_t height, const PerspectiveCamera& camera);
         void EndFrame();
 
-        // Offscreen output for debugging/post (optional)
         uint32_t GetSceneColorTexture() const;
 
     private:

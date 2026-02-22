@@ -13,6 +13,8 @@
 
 namespace Engine {
 
+    RendererPipeline::~RendererPipeline() = default;
+
     RendererPipeline::RendererPipeline() {
         m_ScreenQuadVAO = ScreenQuad::GetVAO();
     }
@@ -21,17 +23,13 @@ namespace Engine {
         m_Width = width;
         m_Height = height;
 
-        if (!m_SceneFB) {
+        if (!m_SceneFB)
             m_SceneFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height });
-        }
-        else {
+        else
             m_SceneFB->Resize(width, height);
-        }
 
-        if (!m_ScreenShader) {
-            // Load from file through your Shader class (uses #type parsing)
+        if (!m_ScreenShader)
             m_ScreenShader = std::make_shared<Shader>("Assets/Shaders/Screen.shader");
-        }
 
         // Scene pass
         m_SceneFB->Bind();
@@ -39,20 +37,26 @@ namespace Engine {
         RenderCommand::SetClearColor(0.08f, 0.10f, 0.12f, 1.0f);
         RenderCommand::Clear();
 
-        /*Renderer::BeginScene(camera);*/
+        // IMPORTANT: begin scene here
+        Renderer::BeginScene(camera);
     }
 
     void RendererPipeline::EndFrame() {
-        // Finish scene draw list
+        // Finish scene draw list into the offscreen framebuffer
         Renderer::EndScene();
 
-        // Present pass
+        // Present pass (fullscreen quad)
         Framebuffer::BindDefault();
         RenderCommand::SetViewport(0, 0, m_Width, m_Height);
+
+        // No need to clear color/depth here unless you want; but harmless:
         RenderCommand::SetClearColor(0.f, 0.f, 0.f, 1.f);
         RenderCommand::Clear();
 
+        // Fullscreen should not use depth
+        glDisable(GL_DEPTH_TEST);
         DrawFullscreen();
+        glEnable(GL_DEPTH_TEST);
     }
 
     void RendererPipeline::DrawFullscreen() {
