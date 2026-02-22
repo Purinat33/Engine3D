@@ -18,6 +18,10 @@
 
 #include "Engine/Renderer/RendererPipeline.h"
 
+
+#include "Engine/Scene/Scene.h"
+#include "Engine/Scene/Components.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>             
@@ -33,20 +37,31 @@ namespace Engine {
 
     void Application::Run() {
         CameraController camCtrl(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
+        RendererPipeline pipeline;
 
+        // Assets
         ShaderLibrary shaders;
         auto litShader = shaders.Load("Assets/Shaders/Lit.glsl");
-        
 
-        Model model3d("Assets/Models/monkey.obj", litShader);
+        auto model = std::make_shared<Model>("Assets/Models/monkey.obj", litShader);
+
+        // Scene setup
+        Scene scene;
+
+        auto monkey = scene.CreateEntity("Monkey");
+        monkey.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
+        monkey.AddComponent<MeshRendererComponent>(model);
+
+        auto sun = scene.CreateEntity("SunLight");
+        sun.AddComponent<DirectionalLightComponent>(
+            glm::vec3(0.4f, 0.8f, -0.3f),
+            glm::vec3(1.0f, 1.0f, 1.0f)
+        );
 
         auto start = std::chrono::high_resolution_clock::now();
         auto last = start;
 
-        RendererPipeline pipeline;
-
         while (!m_Window->ShouldClose()) {
-
             auto now = std::chrono::high_resolution_clock::now();
             float dt = std::chrono::duration<float>(now - last).count();
             last = now;
@@ -55,25 +70,21 @@ namespace Engine {
 
             camCtrl.OnUpdate(dt);
 
-            glm::mat4 modelM(1.0f);
-            modelM = glm::rotate(modelM, t, glm::vec3(0.0f, 1.0f, 0.0f));
+            // Spin monkey by updating its TransformComponent
+            monkey.GetComponent<TransformComponent>().Rotation.y = t;
 
-            // Begin pipeline frame (does: bind scene FB, clear, BeginScene(camera))
+            scene.OnUpdate(dt);
+
             pipeline.BeginFrame(m_Window->GetWidth(), m_Window->GetHeight(), camCtrl.GetCamera());
 
-            // Light params — set once per frame (shader is used by model materials)
-            litShader->Bind();
-            litShader->SetFloat3("u_LightDir", 0.4f, 0.8f, -0.3f);
-            litShader->SetFloat3("u_LightColor", 1.0f, 1.0f, 1.0f);
+            // Scene does BeginScene/Submit/EndScene internally (for now)
+            scene.OnRender(camCtrl.GetCamera());
 
-            for (const auto& sm : model3d.GetSubMeshes())
-                Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), modelM);
-
-            // End pipeline frame (does: EndScene, bind default FB, draw screen quad)
+            // Pipeline presents the offscreen scene to screen
             pipeline.EndFrame();
 
             m_Window->OnUpdate();
         }
-        
     }
+    
 }

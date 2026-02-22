@@ -39,7 +39,7 @@ namespace Engine {
         RenderCommand::SetClearColor(0.08f, 0.10f, 0.12f, 1.0f);
         RenderCommand::Clear();
 
-        Renderer::BeginScene(camera);
+        /*Renderer::BeginScene(camera);*/
     }
 
     void RendererPipeline::EndFrame() {
