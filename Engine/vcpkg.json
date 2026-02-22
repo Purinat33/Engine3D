@@ -1,0 +1,12 @@
+{
+  "name": "engine3d",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "glfw3",
+    "glm",
+    "imgui",
+    "entt",
+    "assimp"
+  ],
+  "builtin-baseline": "PUT_BASELINE_HERE"
+}
