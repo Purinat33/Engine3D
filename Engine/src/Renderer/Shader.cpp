@@ -2,6 +2,7 @@
 #include "Engine/Renderer/Shader.h"
 
 #include <glad/glad.h>
+#include <unordered_map>
 #include <vector>
 #include <iostream>
 
@@ -61,6 +62,12 @@ namespace Engine {
         glDetachShader(m_RendererID, fs);
         glDeleteShader(vs);
         glDeleteShader(fs);
+    }
+
+    void Shader::SetMat4(const std::string& name, const float* value4x4) const {
+        int loc = glGetUniformLocation(m_RendererID, name.c_str());
+        if (loc != -1)
+            glUniformMatrix4fv(loc, 1, GL_FALSE, value4x4);
     }
 
     Shader::~Shader() {

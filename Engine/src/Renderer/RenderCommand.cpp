@@ -1,0 +1,29 @@
+#include "pch.h"
+#include "Engine/Renderer/RenderCommand.h"
+
+#include <glad/glad.h>
+
+namespace Engine {
+
+    void RenderCommand::Init() {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+    }
+
+    void RenderCommand::SetViewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+        glViewport((int)x, (int)y, (int)width, (int)height);
+    }
+
+    void RenderCommand::SetClearColor(float r, float g, float b, float a) {
+        glClearColor(r, g, b, a);
+    }
+
+    void RenderCommand::Clear() {
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+
+    void RenderCommand::DrawIndexed(uint32_t indexCount) {
+        glDrawElements(GL_TRIANGLES, (int)indexCount, GL_UNSIGNED_INT, nullptr);
+    }
+
+} // namespace Engine

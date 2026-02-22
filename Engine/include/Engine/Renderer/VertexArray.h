@@ -15,6 +15,7 @@ namespace Engine {
         void SetIndexBuffer(const std::shared_ptr<IndexBuffer>& ib);
 
         const std::shared_ptr<IndexBuffer>& GetIndexBuffer() const { return m_IndexBuffer; }
+        uint32_t GetRendererID() const { return m_RendererID; }
 
     private:
         uint32_t m_RendererID = 0;

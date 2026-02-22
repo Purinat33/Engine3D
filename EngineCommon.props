@@ -19,7 +19,7 @@
 				$(SolutionDir)third_party\glad\include;
 				%(AdditionalIncludeDirectories)
 			</AdditionalIncludeDirectories>
-
+			<LanguageStandard>stdcpp20</LanguageStandard>
 			<!-- Nice for GLFW + glad include order -->
 			<PreprocessorDefinitions>
 				GLFW_INCLUDE_NONE;
