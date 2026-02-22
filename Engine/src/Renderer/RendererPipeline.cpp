@@ -11,7 +11,6 @@
 #include "Engine/Renderer/Material.h"
 
 #include <glad/glad.h>
-#include <algorithm>
 
 namespace Engine {
 
@@ -21,17 +20,47 @@ namespace Engine {
         m_ScreenQuadVAO = ScreenQuad::GetVAO();
     }
 
-    void RendererPipeline::BeginFrame(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
+    void RendererPipeline::EnsureSceneResources(uint32_t width, uint32_t height) {
         m_Width = width;
         m_Height = height;
 
-        if (!m_SceneFB)
+        if (!m_SceneFB) {
+            // RGBA8 scene color
             m_SceneFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height, FramebufferColorFormat::RGBA8 });
-        else
+        }
+        else {
             m_SceneFB->Resize(width, height);
+        }
 
-        if (!m_ScreenShader)
+        // This shader is only needed for PresentToScreen() (fullscreen)
+        if (!m_ScreenShader) {
             m_ScreenShader = std::make_shared<Shader>("Assets/Shaders/Screen.shader");
+        }
+    }
+
+    void RendererPipeline::EnsurePickingResources(uint32_t width, uint32_t height) {
+        m_Width = width;
+        m_Height = height;
+
+        if (!m_IDFB) {
+            // R32UI ID buffer
+            m_IDFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height, FramebufferColorFormat::R32UI });
+        }
+        else {
+            m_IDFB->Resize(width, height);
+        }
+
+        if (!m_IDShader) {
+            m_IDShader = std::make_shared<Shader>("Assets/Shaders/ID.shader");
+            m_IDMaterial = std::make_shared<Material>(m_IDShader);
+            m_IDMaterial->SetColor({ 1,1,1,1 }); // harmless
+        }
+    }
+
+    // ------------------------- Scene pass -------------------------
+
+    void RendererPipeline::BeginScenePass(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
+        EnsureSceneResources(width, height);
 
         m_SceneFB->Bind();
         RenderCommand::SetViewport(0, 0, width, height);
@@ -39,53 +68,33 @@ namespace Engine {
         RenderCommand::Clear();
 
         Renderer::BeginScene(camera);
+        m_ScenePassActive = true;
     }
 
-    void RendererPipeline::EndFrame() {
+    void RendererPipeline::EndScenePass() {
+        if (!m_ScenePassActive)
+            return;
+
         Renderer::EndScene();
-        Present();
+        m_ScenePassActive = false;
     }
 
-    void RendererPipeline::BeginPickingPass(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
-        m_Width = width;
-        m_Height = height;
-
-        if (!m_IDFB)
-            m_IDFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height, FramebufferColorFormat::R32UI });
-        else
-            m_IDFB->Resize(width, height);
-
-        if (!m_IDShader) {
-            m_IDShader = std::make_shared<Shader>("Assets/Shaders/ID.shader");
-            m_IDMaterial = std::make_shared<Material>(m_IDShader);
-            m_IDMaterial->SetColor({ 1,1,1,1 }); // harmless
-        }
-
-        m_IDFB->Bind();
-        RenderCommand::SetViewport(0, 0, width, height);
-
-        // Clear ID buffer to 0 = "no entity"
-        m_IDFB->ClearUInt(0);
-
-        Renderer::BeginScene(camera);
+    void RendererPipeline::RenderToScreen(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
+        BeginScenePass(width, height, camera);
+        // caller submits between Begin/End; this function is just compatibility
+        EndScenePass();
+        PresentToScreen();
     }
 
-    void RendererPipeline::EndPickingPass() {
-        Renderer::EndScene();
-    }
+    // ------------------------- Present pass -------------------------
 
-    uint32_t RendererPipeline::ReadPickingID(uint32_t mouseX, uint32_t mouseY) const {
-        if (!m_IDFB) return 0;
+    void RendererPipeline::PresentToScreen() {
+        // You can call this even if you plan to show the texture in ImGui.
+        // In editor, you'll likely skip PresentToScreen() and just use GetSceneColorTexture().
 
-        // Convert from top-left origin (mouse) to bottom-left (OpenGL)
-        if (mouseX >= m_Width || mouseY >= m_Height) return 0;
-        uint32_t x = mouseX;
-        uint32_t y = (m_Height - 1) - mouseY;
+        if (!m_SceneFB || !m_ScreenShader || !m_ScreenQuadVAO)
+            return;
 
-        return m_IDFB->ReadPixelUInt(x, y);
-    }
-
-    void RendererPipeline::Present() {
         Framebuffer::BindDefault();
         RenderCommand::SetViewport(0, 0, m_Width, m_Height);
         RenderCommand::SetClearColor(0.f, 0.f, 0.f, 1.f);
@@ -104,7 +113,7 @@ namespace Engine {
         glBindTexture(GL_TEXTURE_2D, m_SceneFB->GetColorAttachmentRendererID());
         m_ScreenShader->SetInt("u_Scene", 0);
 
-        // ID buffer (if available)
+        // ID buffer (optional). Needed for outline.
         glActiveTexture(GL_TEXTURE1);
         if (m_IDFB)
             glBindTexture(GL_TEXTURE_2D, m_IDFB->GetColorAttachmentRendererID());
@@ -113,14 +122,58 @@ namespace Engine {
 
         m_ScreenShader->SetInt("u_ID", 1);
 
-        // Selected ID (0 disables outline)
+        // Selection (0 disables outline)
         m_ScreenShader->SetUInt("u_SelectedID", m_SelectedID);
 
-        // Outline color
+        // Outline color (tweak as you like)
         m_ScreenShader->SetFloat3("u_OutlineColor", 1.0f, 0.85f, 0.1f);
 
         m_ScreenQuadVAO->Bind();
         RenderCommand::DrawIndexed(m_ScreenQuadVAO->GetIndexBuffer()->GetCount());
+    }
+
+    // ------------------------- Picking pass -------------------------
+
+    void RendererPipeline::BeginPickingPass(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
+        EnsurePickingResources(width, height);
+
+        m_IDFB->Bind();
+        RenderCommand::SetViewport(0, 0, width, height);
+
+        // Clear ID buffer to 0 ("nothing")
+        m_IDFB->ClearUInt(0);
+
+        Renderer::BeginScene(camera);
+        m_PickingPassActive = true;
+    }
+
+    void RendererPipeline::EndPickingPass() {
+        if (!m_PickingPassActive)
+            return;
+
+        Renderer::EndScene();
+        m_PickingPassActive = false;
+    }
+
+    uint32_t RendererPipeline::ReadPickingID(uint32_t mouseX, uint32_t mouseY) const {
+        if (!m_IDFB) return 0;
+        if (mouseX >= m_Width || mouseY >= m_Height) return 0;
+
+        // Convert mouse (top-left origin) to OpenGL (bottom-left origin)
+        uint32_t x = mouseX;
+        uint32_t y = (m_Height - 1) - mouseY;
+
+        return m_IDFB->ReadPixelUInt(x, y);
+    }
+
+    // ------------------------- Texture getters -------------------------
+
+    uint32_t RendererPipeline::GetSceneColorTexture() const {
+        return m_SceneFB ? m_SceneFB->GetColorAttachmentRendererID() : 0;
+    }
+
+    uint32_t RendererPipeline::GetIDTexture() const {
+        return m_IDFB ? m_IDFB->GetColorAttachmentRendererID() : 0;
     }
 
 } // namespace Engine

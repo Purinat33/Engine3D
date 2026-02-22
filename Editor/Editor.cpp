@@ -368,20 +368,20 @@ int main() {
         pipeline.EndPickingPass();
 
         // Normal render (outline uses ID buffer + selectedID)
-        pipeline.BeginFrame(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
+        //pipeline.BeginFrame(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
 
-        // Grid
-        gridShader->Bind();
-        gridShader->SetFloat("u_GridScale", 1.0f);
-        gridShader->SetFloat3("u_GridColor", 0.45f, 0.45f, 0.45f);
-        gridShader->SetFloat3("u_BaseColor", 0.12f, 0.12f, 0.12f);
-        gridShader->SetFloat("u_Opacity", 0.30f);
-        Renderer::Submit(gridMat, gridVAO, glm::mat4(1.0f));
+        //// Grid
+        //gridShader->Bind();
+        //gridShader->SetFloat("u_GridScale", 1.0f);
+        //gridShader->SetFloat3("u_GridColor", 0.45f, 0.45f, 0.45f);
+        //gridShader->SetFloat3("u_BaseColor", 0.12f, 0.12f, 0.12f);
+        //gridShader->SetFloat("u_Opacity", 0.30f);
+        //Renderer::Submit(gridMat, gridVAO, glm::mat4(1.0f));
 
-        scene.OnUpdate(dt);
-        scene.OnRender(editorCam.GetCamera());
+        //scene.OnUpdate(dt);
+        //scene.OnRender(editorCam.GetCamera());
 
-        pipeline.EndFrame();
+        //pipeline.EndFrame();
         window->OnUpdate();
     }
 

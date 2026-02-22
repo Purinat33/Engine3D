@@ -111,13 +111,10 @@ namespace Engine {
 
             scene.OnUpdate(dt);
 
-            pipeline.BeginFrame(m_Window->GetWidth(), m_Window->GetHeight(), camCtrl.GetCamera());
-
-            // Scene does BeginScene/Submit/EndScene internally (for now)
-            scene.OnRender(camCtrl.GetCamera());
-
-            // Pipeline presents the offscreen scene to screen
-            pipeline.EndFrame();
+            pipeline.BeginScenePass(m_Window->GetWidth(), m_Window->GetHeight(), camCtrl.GetCamera());
+            scene.OnRender(camCtrl.GetCamera());          // submits only
+            pipeline.EndScenePass();
+            pipeline.PresentToScreen();
 
             m_Window->OnUpdate();
         }
