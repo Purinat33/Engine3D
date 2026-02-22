@@ -29,6 +29,21 @@ namespace Engine {
         return entity;
     }
 
+    Entity Scene::FindEntityByPickID(uint32_t pickID) {
+        if (pickID == 0) return {};
+
+        auto view = m_Registry.view<IDComponent>();
+        for (auto e : view) {
+            const auto& idc = view.get<IDComponent>(e);
+            uint32_t folded = (uint32_t)(idc.ID ^ (idc.ID >> 32));
+            if (folded == 0) folded = 1u;
+
+            if (folded == pickID)
+                return Entity(e, &m_Registry);
+        }
+        return {};
+    }
+
     void Scene::DestroyEntity(Entity entity) {
         if (!entity) return;
         m_Registry.destroy(entity.GetHandle());

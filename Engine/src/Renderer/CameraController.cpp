@@ -67,4 +67,19 @@ namespace Engine {
         m_Camera.SetRotation(m_Yaw, m_Pitch);
     }
 
+    glm::vec3 CameraController::GetForward() const {
+        // must match your camera forward convention (-Z when yaw=pitch=0)
+        glm::vec3 f{
+            cosf(m_Pitch) * sinf(m_Yaw),
+            sinf(m_Pitch),
+            -cosf(m_Pitch) * cosf(m_Yaw)
+        };
+        return glm::normalize(f);
+    }
+
+    glm::vec3 CameraController::GetRight() const {
+        glm::vec3 forward = GetForward();
+        return glm::normalize(glm::cross(forward, glm::vec3(0, 1, 0)));
+    }
+
 } // namespace Engine

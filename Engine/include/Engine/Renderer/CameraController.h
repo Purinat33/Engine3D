@@ -21,6 +21,10 @@ namespace Engine {
         void SetMouseSensitivity(float s) { m_MouseSensitivity = s; }
         void SetActive(bool active) { m_Active = active; }
         bool IsActive() const { return m_Active; }
+        glm::vec3 GetPosition() const { return m_Position; }
+        glm::vec3 GetForward() const;
+        glm::vec3 GetRight() const;
+
     private:
         PerspectiveCamera m_Camera;
         bool m_Active = true;

@@ -2,7 +2,7 @@
 #include <entt/entt.hpp>
 #include <string>
 #include <memory>
-
+#include <cstdint>
 #include "Engine/Scene/Entity.h"
 #include "Engine/Scene/UUID.h"
 
@@ -14,6 +14,8 @@ namespace Engine {
     class Scene {
     public:
         Scene() = default;
+
+        Entity FindEntityByPickID(uint32_t pickID);
 
         entt::registry& Registry() { return m_Registry; }
         const entt::registry& Registry() const { return m_Registry; }
