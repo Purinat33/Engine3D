@@ -24,6 +24,8 @@ namespace Engine {
 
         void SetInt(const std::string& name, int value) const;
 
+        void SetFloat3(const std::string& name, float x, float y, float z) const;
+
     private:
         uint32_t CompileStage(uint32_t type, const std::string& src);
         uint32_t CreateProgram(const std::string& vertexSrc, const std::string& fragmentSrc);

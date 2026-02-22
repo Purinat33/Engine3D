@@ -70,7 +70,9 @@ namespace Engine {
             }
 
             cmd.VaoPtr->Bind();
-            RenderCommand::DrawIndexed(cmd.VaoPtr->GetIndexBuffer()->GetCount());
+            auto count = cmd.VaoPtr->GetIndexBuffer()->GetCount();
+            if (count == 0) continue;
+            RenderCommand::DrawIndexed(count);
         }
     }
 } // namespace Engine

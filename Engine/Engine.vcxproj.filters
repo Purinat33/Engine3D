@@ -60,6 +60,12 @@
     <ClInclude Include="include\Engine\Renderer\Material.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\Engine\Renderer\Mesh.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Engine\Renderer\Model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -104,11 +110,20 @@
     <ClCompile Include="src\Renderer\Material.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Renderer\Mesh.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Renderer\Model.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />
     <None Include="..\Assets\Shaders\FlatColor.glsl" />
     <None Include="..\Assets\Shaders\Textured.glsl">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="..\Assets\Shaders\Lit.glsl">
       <Filter>Source Files</Filter>
     </None>
   </ItemGroup>

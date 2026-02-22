@@ -154,6 +154,8 @@
     <ClInclude Include="include\Engine\Engine.h" />
     <ClInclude Include="include\Engine\Renderer\Buffer.h" />
     <ClInclude Include="include\Engine\Renderer\Material.h" />
+    <ClInclude Include="include\Engine\Renderer\Mesh.h" />
+    <ClInclude Include="include\Engine\Renderer\Model.h" />
     <ClInclude Include="include\Engine\Renderer\PerspectiveCamera.h" />
     <ClInclude Include="include\Engine\Renderer\RenderCommand.h" />
     <ClInclude Include="include\Engine\Renderer\Renderer.h" />
@@ -179,6 +181,8 @@
     <ClCompile Include="src\Platform\Windows\WindowsWindow.cpp" />
     <ClCompile Include="src\Renderer\Buffer.cpp" />
     <ClCompile Include="src\Renderer\Material.cpp" />
+    <ClCompile Include="src\Renderer\Mesh.cpp" />
+    <ClCompile Include="src\Renderer\Model.cpp" />
     <ClCompile Include="src\Renderer\PerspectiveCamera.cpp" />
     <ClCompile Include="src\Renderer\RenderCommand.cpp" />
     <ClCompile Include="src\Renderer\Renderer.cpp" />
@@ -190,6 +194,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\Assets\Shaders\FlatColor.glsl" />
+    <None Include="..\Assets\Shaders\Lit.glsl" />
     <None Include="..\Assets\Shaders\Textured.glsl" />
     <None Include="vcpkg.json" />
   </ItemGroup>

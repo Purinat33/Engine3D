@@ -7,11 +7,14 @@
 #include "Engine/Renderer/Buffer.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
 #include "Engine/Renderer/ShaderLibrary.h"
+#include "Engine/Renderer/Shader.h"       
 #include "Engine/Renderer/Texture2D.h"
-#include "Engine/Renderer/Material.h"   // <-- add this
+#include "Engine/Renderer/Material.h"
+#include "Engine/Renderer/Model.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <chrono>                         
 
 namespace Engine {
 
@@ -21,38 +24,16 @@ namespace Engine {
     }
 
     void Application::Run() {
-        // Quad: position + texCoord
-        float vertices[] = {
-            // x     y     z      u     v
-            -0.5f, -0.5f, 0.0f,  0.0f, 0.0f,
-             0.5f, -0.5f, 0.0f,  1.0f, 0.0f,
-             0.5f,  0.5f, 0.0f,  1.0f, 1.0f,
-            -0.5f,  0.5f, 0.0f,  0.0f, 1.0f
-        };
-        uint32_t indices[] = { 0, 1, 2, 2, 3, 0 };
-
-        auto vao = std::make_shared<VertexArray>();
-
-        auto vb = std::make_shared<VertexBuffer>(vertices, sizeof(vertices));
-        vb->SetLayout({
-            { ShaderDataType::Float3 }, // pos
-            { ShaderDataType::Float2 }  // uv
-            });
-        vao->AddVertexBuffer(vb);
-
-        auto ib = std::make_shared<IndexBuffer>(indices, 6);
-        vao->SetIndexBuffer(ib);
-
-        // Load GPU resources ONCE
         ShaderLibrary shaders;
-        auto texturedShader = shaders.Load("Assets/Shaders/Textured.glsl");
-        auto texture = std::make_shared<Texture2D>("Assets/Textures/checker.png");
+        auto litShader = shaders.Load("Assets/Shaders/Lit.glsl");
+        auto litMat = std::make_shared<Material>(litShader);
 
-        auto texturedMat = std::make_shared<Material>(texturedShader);
-        texturedMat->SetTexture(0, texture);
+        Model model3d("Assets/Models/monkey.obj");
 
         PerspectiveCamera camera(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
         camera.SetPosition({ 0.0f, 0.0f, 3.0f });
+
+        auto start = std::chrono::high_resolution_clock::now();
 
         while (!m_Window->ShouldClose()) {
             RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
@@ -61,15 +42,25 @@ namespace Engine {
 
             Renderer::BeginScene(camera);
 
-            glm::mat4 model = glm::mat4(1.0f);
-            glm::mat4 model2 = glm::translate(glm::mat4(1.0f), glm::vec3(1.1f, 0.0f, 0.0f));
+            // time in seconds
+            auto now = std::chrono::high_resolution_clock::now();
+            float t = std::chrono::duration<float>(now - start).count();
 
-            Renderer::Submit(texturedMat, vao, model);
-            Renderer::Submit(texturedMat, vao, model2);
+            // Light params
+            litShader->Bind();
+            litShader->SetFloat3("u_LightDir", 0.4f, 0.8f, -0.3f);
+            litShader->SetFloat3("u_LightColor", 1.0f, 1.0f, 1.0f);
+            litShader->SetFloat3("u_BaseColor", 0.9f, 0.7f, 0.2f);
+
+            glm::mat4 modelM(1.0f);
+            modelM = glm::rotate(modelM, t, glm::vec3(0.0f, 1.0f, 0.0f));
+
+            for (auto& mesh : model3d.GetMeshes()) {
+                Renderer::Submit(litMat, mesh->GetVertexArray(), modelM);
+            }
 
             Renderer::EndScene();
             m_Window->OnUpdate();
         }
     }
-
-} // namespace Engine
+}

@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <vector>
+#include <cstddef>
 
 namespace Engine {
 
@@ -25,8 +26,15 @@ namespace Engine {
         bool Normalized = false;
 
         BufferElement() = default;
+
+        // automatic layout
         BufferElement(ShaderDataType type, bool normalized = false)
-            : Type(type), Normalized(normalized) {
+            : Type(type), Offset(0), Normalized(normalized) {
+        }
+
+        // explicit offset layout
+        BufferElement(ShaderDataType type, uint32_t offset, bool normalized = false)
+            : Type(type), Offset(offset), Normalized(normalized) {
         }
 
         uint32_t Size() const { return ShaderDataTypeSize(Type); }
@@ -44,9 +52,16 @@ namespace Engine {
     class BufferLayout {
     public:
         BufferLayout() = default;
+
+        // auto offsets + stride = sum(sizes)
         BufferLayout(std::initializer_list<BufferElement> elements)
             : m_Elements(elements) {
             CalculateOffsetsAndStride();
+        }
+
+        // explicit offsets, explicit stride (for struct-based vertex layouts)
+        BufferLayout(std::initializer_list<BufferElement> elements, uint32_t stride)
+            : m_Elements(elements), m_Stride(stride) {
         }
 
         uint32_t GetStride() const { return m_Stride; }
@@ -67,6 +82,7 @@ namespace Engine {
         std::vector<BufferElement> m_Elements;
         uint32_t m_Stride = 0;
     };
+
 
     class VertexBuffer {
     public:

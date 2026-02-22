@@ -46,8 +46,11 @@ namespace Engine {
             );
             m_AttribIndex++;
         }
-    }
 
+        // IMPORTANT: keep VB alive
+        m_VertexBuffers.push_back(vb);
+    }
+    
     void VertexArray::SetIndexBuffer(const std::shared_ptr<IndexBuffer>& ib) {
         Bind();
         ib->Bind();
