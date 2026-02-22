@@ -80,6 +80,7 @@ int main() {
             if (mb.GetMouseButton() == 0) { // left click
                 uint32_t id = pipeline.ReadPickingID((uint32_t)mouseX, (uint32_t)mouseY);
                 selectedID = id;
+                pipeline.SetSelectedID(selectedID);
                 std::cout << "[Pick] ID = " << selectedID << "\n";
                 return true;
             }
@@ -165,15 +166,17 @@ int main() {
         editorCam.SetActive(cameraControl);
         editorCam.OnUpdate(dt);
 
-        // Render
-        pipeline.BeginFrame(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
-        scene.OnRender(editorCam.GetCamera());              // submits normal materials
-        pipeline.EndFrame();                                // ends + presents
-
-        // Build/refresh picking buffer every frame (simple + reliable)
+        // 1) Build picking buffer for this frame
         pipeline.BeginPickingPass(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
-        scene.OnRenderPicking(editorCam.GetCamera(), pipeline.GetIDMaterial()); // submits ID material with entity IDs
+        scene.OnRenderPicking(editorCam.GetCamera(), pipeline.GetIDMaterial());
         pipeline.EndPickingPass();
+
+        // 2) Normal scene render + present (uses ID buffer for outline)
+        pipeline.BeginFrame(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
+        scene.OnRender(editorCam.GetCamera());
+        pipeline.EndFrame();
+
+
         window->OnUpdate();
     }
 

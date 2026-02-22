@@ -25,12 +25,14 @@ namespace Engine {
         uint32_t ReadPickingID(uint32_t mouseX, uint32_t mouseY) const; // mouse coords top-left origin
 
         std::shared_ptr<Material> GetIDMaterial() const { return m_IDMaterial; }
-
+        void SetSelectedID(uint32_t id) { m_SelectedID = id; }
+        uint32_t GetSelectedID() const { return m_SelectedID; }
     private:
         void Present();
         void DrawFullscreen();
 
     private:
+        uint32_t m_SelectedID = 0;
         std::unique_ptr<Framebuffer> m_SceneFB;
         std::shared_ptr<Shader> m_ScreenShader;
         std::shared_ptr<VertexArray> m_ScreenQuadVAO;

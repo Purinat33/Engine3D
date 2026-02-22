@@ -204,5 +204,8 @@
     <None Include="..\Assets\Shaders\Screen.glsl">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="..\Assets\Shaders\Screen.shader">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -13,7 +13,7 @@
           -0.30000001192092896
         ]
       },
-      "ID": 10244859687663873869,
+      "ID": 4045365220086199416,
       "Tag": "SunLight",
       "Transform": {
         "Rotation": [
@@ -34,7 +34,7 @@
       }
     },
     {
-      "ID": 7682556546075011549,
+      "ID": 3462309724116225561,
       "MeshRenderer": {
         "ModelPath": "Assets\\Models\\monkey.obj",
         "ShaderPath": "Assets\\Shaders\\Lit.glsl"

@@ -99,9 +99,25 @@ namespace Engine {
     void RendererPipeline::DrawFullscreen() {
         m_ScreenShader->Bind();
 
+        // Scene color
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_SceneFB->GetColorAttachmentRendererID());
         m_ScreenShader->SetInt("u_Scene", 0);
+
+        // ID buffer (if available)
+        glActiveTexture(GL_TEXTURE1);
+        if (m_IDFB)
+            glBindTexture(GL_TEXTURE_2D, m_IDFB->GetColorAttachmentRendererID());
+        else
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+        m_ScreenShader->SetInt("u_ID", 1);
+
+        // Selected ID (0 disables outline)
+        m_ScreenShader->SetUInt("u_SelectedID", m_SelectedID);
+
+        // Outline color
+        m_ScreenShader->SetFloat3("u_OutlineColor", 1.0f, 0.85f, 0.1f);
 
         m_ScreenQuadVAO->Bind();
         RenderCommand::DrawIndexed(m_ScreenQuadVAO->GetIndexBuffer()->GetCount());
