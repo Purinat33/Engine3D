@@ -5,9 +5,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace Engine {
+#include "Engine/Assets/AssetHandle.h"
 
-    class Model;
+namespace Engine {
 
     // Simple name/tag
     struct TagComponent {
@@ -32,12 +32,12 @@ namespace Engine {
         }
     };
 
-    // Renderable component: for now, just a Model (which already has submeshes/materials)
+    // Renderable component: references a model asset by handle
     struct MeshRendererComponent {
-        std::shared_ptr<Model> ModelPtr;
+        AssetHandle Model = InvalidAssetHandle;
 
         MeshRendererComponent() = default;
-        MeshRendererComponent(const std::shared_ptr<Model>& model) : ModelPtr(model) {}
+        MeshRendererComponent(AssetHandle modelHandle) : Model(modelHandle) {}
     };
 
     // One directional light is enough for now

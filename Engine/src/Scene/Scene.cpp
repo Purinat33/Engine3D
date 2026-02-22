@@ -1,7 +1,8 @@
 #include "pch.h"
 #include "Engine/Scene/Scene.h"
 #include "Engine/Scene/Components.h"
-#include "Engine/Scene/Entity.h"
+
+#include "Engine/Assets/AssetManager.h"
 
 #include "Engine/Renderer/Renderer.h"
 #include "Engine/Renderer/Material.h"
@@ -32,31 +33,35 @@ namespace Engine {
     }
 
     void Scene::OnRender(const PerspectiveCamera& camera) {
+        auto& assets = AssetManager::Get();
+
         glm::vec3 lightDir{ 0.4f, 0.8f, -0.3f };
         glm::vec3 lightColor{ 1.0f };
 
         // Grab first directional light, if any
         {
             auto lightView = m_Registry.view<DirectionalLightComponent>();
-            bool foundLight = false;
-
+            bool found = false;
             lightView.each([&](auto /*entity*/, DirectionalLightComponent& light) {
-                if (foundLight) return;
+                if (found) return;
                 lightDir = light.Direction;
                 lightColor = light.Color;
-                foundLight = true;
+                found = true;
                 });
         }
 
-        // Collect unique shaders used by renderables
+        // Collect unique shaders used by all renderables
         std::unordered_set<Shader*> uniqueShaders;
 
         auto renderView = m_Registry.view<TransformComponent, MeshRendererComponent>();
 
         renderView.each([&](auto /*entity*/, TransformComponent& /*tc*/, MeshRendererComponent& mrc) {
-            if (!mrc.ModelPtr) return;
+            if (mrc.Model == InvalidAssetHandle) return;
 
-            for (const auto& sm : mrc.ModelPtr->GetSubMeshes()) {
+            auto model = assets.GetModel(mrc.Model);
+            if (!model) return;
+
+            for (const auto& sm : model->GetSubMeshes()) {
                 if (!sm.MaterialPtr) continue;
                 const auto& shader = sm.MaterialPtr->GetShader();
                 if (shader) uniqueShaders.insert(shader.get());
@@ -74,11 +79,14 @@ namespace Engine {
         Renderer::BeginScene(camera);
 
         renderView.each([&](auto /*entity*/, TransformComponent& tc, MeshRendererComponent& mrc) {
-            if (!mrc.ModelPtr) return;
+            if (mrc.Model == InvalidAssetHandle) return;
+
+            auto model = assets.GetModel(mrc.Model);
+            if (!model) return;
 
             glm::mat4 entityTransform = tc.GetTransform();
 
-            for (const auto& sm : mrc.ModelPtr->GetSubMeshes()) {
+            for (const auto& sm : model->GetSubMeshes()) {
                 if (!sm.MeshPtr || !sm.MaterialPtr) continue;
                 Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), entityTransform);
             }

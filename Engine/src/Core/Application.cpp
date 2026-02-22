@@ -22,6 +22,8 @@
 #include "Engine/Scene/Scene.h"
 #include "Engine/Scene/Components.h"
 
+#include "Engine/Assets/AssetManager.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>             
@@ -39,18 +41,16 @@ namespace Engine {
         CameraController camCtrl(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
         RendererPipeline pipeline;
 
-        // Assets
-        ShaderLibrary shaders;
-        auto litShader = shaders.Load("Assets/Shaders/Lit.glsl");
+        auto& assets = AssetManager::Get();
 
-        auto model = std::make_shared<Model>("Assets/Models/monkey.obj", litShader);
+        AssetHandle litShaderH = assets.LoadShader("Assets/Shaders/Lit.glsl");
+        AssetHandle monkeyModelH = assets.LoadModel("Assets/Models/monkey.obj", litShaderH);
 
-        // Scene setup
         Scene scene;
 
         auto monkey = scene.CreateEntity("Monkey");
         monkey.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
-        monkey.AddComponent<MeshRendererComponent>(model);
+        monkey.AddComponent<MeshRendererComponent>(monkeyModelH);
 
         auto sun = scene.CreateEntity("SunLight");
         sun.AddComponent<DirectionalLightComponent>(
