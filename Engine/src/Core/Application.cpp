@@ -26,6 +26,9 @@
 
 #include "Engine/Scene/SceneSerializer.h"
 
+#include "Engine/Events/Event.h"
+#include "Engine/Events/ApplicationEvent.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>             
@@ -36,7 +39,30 @@ namespace Engine {
 
     Application::Application() {
         m_Window = Window::Create({ "Engine3D - Sandbox", 1280, 720 });
+        m_Window->SetEventCallback([this](Event& e) { this->OnEvent(e); });
+
         Renderer::Init();
+    }
+
+    void Application::OnEvent(Event& e) {
+        EventDispatcher dispatcher(e);
+        dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& ev) { return OnWindowClose(ev); });
+        dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& ev) { return OnWindowResize(ev); });
+
+        // Optional: log events
+        // std::cout << e.ToString() << "\n";
+    }
+
+    bool Application::OnWindowClose(WindowCloseEvent&) {
+        m_Running = false;
+        return true;
+    }
+
+    bool Application::OnWindowResize(WindowResizeEvent& e) {
+        // If minimized, skip rendering
+        if (e.GetWidth() == 0 || e.GetHeight() == 0)
+            return false;
+        return false; // not "handled" strictly; pipeline can still resize each frame
     }
 
     void Application::Run() {
@@ -71,7 +97,7 @@ namespace Engine {
         auto start = std::chrono::high_resolution_clock::now();
         auto last = start;
 
-        while (!m_Window->ShouldClose()) {
+        while (m_Running && !m_Window->ShouldClose()) {
             auto now = std::chrono::high_resolution_clock::now();
             float dt = std::chrono::duration<float>(now - last).count();
             last = now;

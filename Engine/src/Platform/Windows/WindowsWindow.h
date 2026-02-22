@@ -16,6 +16,8 @@ namespace Engine {
         uint32_t GetWidth() const override { return m_Width; }
         uint32_t GetHeight() const override { return m_Height; }
 
+        void SetEventCallback(const EventCallbackFn& callback) override { m_EventCallback = callback; }
+
         void* GetNativeWindow() const override { return m_Window; }
 
     private:
@@ -24,6 +26,9 @@ namespace Engine {
 
     private:
         GLFWwindow* m_Window = nullptr;
+
+        EventCallbackFn m_EventCallback;
+
         uint32_t m_Width = 0;
         uint32_t m_Height = 0;
         std::string m_Title;

@@ -155,6 +155,10 @@
     <ClInclude Include="include\Engine\Core\Input.h" />
     <ClInclude Include="include\Engine\Core\Window.h" />
     <ClInclude Include="include\Engine\Engine.h" />
+    <ClInclude Include="include\Engine\Events\ApplicationEvent.h" />
+    <ClInclude Include="include\Engine\Events\Event.h" />
+    <ClInclude Include="include\Engine\Events\KeyEvent.h" />
+    <ClInclude Include="include\Engine\Events\MouseEvent.h" />
     <ClInclude Include="include\Engine\Renderer\Buffer.h" />
     <ClInclude Include="include\Engine\Renderer\CameraController.h" />
     <ClInclude Include="include\Engine\Renderer\Framebuffer.h" />

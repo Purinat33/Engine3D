@@ -2,6 +2,9 @@
 #include <string>
 #include <cstdint>
 #include <memory>
+#include <functional>
+
+#include "Engine/Events/Event.h"
 
 namespace Engine {
 
@@ -13,6 +16,8 @@ namespace Engine {
 
     class Window {
     public:
+        using EventCallbackFn = std::function<void(Event&)>;
+
         virtual ~Window() = default;
 
         virtual void OnUpdate() = 0;
@@ -21,7 +26,8 @@ namespace Engine {
         virtual uint32_t GetWidth() const = 0;
         virtual uint32_t GetHeight() const = 0;
 
-        // For advanced usage later (ImGui, raw GLFW calls, etc.)
+        virtual void SetEventCallback(const EventCallbackFn& callback) = 0;
+
         virtual void* GetNativeWindow() const = 0;
 
         static std::unique_ptr<Window> Create(const WindowProps& props = WindowProps{});

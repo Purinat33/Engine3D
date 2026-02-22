@@ -1,13 +1,16 @@
 #include "pch.h"
 #include "WindowsWindow.h"
-#include "Engine/Core/Input.h"
-// Keep GLFW from including legacy GL headers
+
 #ifndef GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_NONE
 #endif
 
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
+
+#include "Engine/Events/ApplicationEvent.h"
+#include "Engine/Events/KeyEvent.h"
+#include "Engine/Events/MouseEvent.h"
 
 namespace Engine {
 
@@ -21,13 +24,8 @@ namespace Engine {
         return std::make_unique<WindowsWindow>(props);
     }
 
-    WindowsWindow::WindowsWindow(const WindowProps& props) {
-        Init(props);
-    }
-
-    WindowsWindow::~WindowsWindow() {
-        Shutdown();
-    }
+    WindowsWindow::WindowsWindow(const WindowProps& props) { Init(props); }
+    WindowsWindow::~WindowsWindow() { Shutdown(); }
 
     void WindowsWindow::Init(const WindowProps& props) {
         m_Title = props.Title;
@@ -36,13 +34,11 @@ namespace Engine {
 
         if (!s_GLFWInitialized) {
             glfwSetErrorCallback(GLFWErrorCallback);
-            if (!glfwInit()) {
+            if (!glfwInit())
                 throw std::runtime_error("Failed to initialize GLFW");
-            }
             s_GLFWInitialized = true;
         }
 
-        // Pick 3.3 Core for broad compatibility; change to 4.6 if you want.
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -52,20 +48,92 @@ namespace Engine {
 #endif
 
         m_Window = glfwCreateWindow((int)m_Width, (int)m_Height, m_Title.c_str(), nullptr, nullptr);
-        if (!m_Window) {
+        if (!m_Window)
             throw std::runtime_error("Failed to create GLFW window");
-        }
-        glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
         glfwMakeContextCurrent(m_Window);
-        glfwSwapInterval(1); // vsync
+        glfwSwapInterval(1);
 
-        Engine::SetNativeGLFWWindow(m_Window);
-        
-
-        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
             throw std::runtime_error("Failed to initialize glad");
-        }
+
+        glfwSetWindowUserPointer(m_Window, this);
+
+        // ---- Window events ----
+        glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
+            auto* ww = (WindowsWindow*)glfwGetWindowUserPointer(window);
+            ww->m_Width = (uint32_t)width;
+            ww->m_Height = (uint32_t)height;
+
+            WindowResizeEvent e((uint32_t)width, (uint32_t)height);
+            if (ww->m_EventCallback) ww->m_EventCallback(e);
+            });
+
+        glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window) {
+            auto* ww = (WindowsWindow*)glfwGetWindowUserPointer(window);
+            WindowCloseEvent e;
+            if (ww->m_EventCallback) ww->m_EventCallback(e);
+            });
+
+        // ---- Keyboard events ----
+        glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/) {
+            auto* ww = (WindowsWindow*)glfwGetWindowUserPointer(window);
+            if (!ww->m_EventCallback) return;
+
+            switch (action) {
+            case GLFW_PRESS: {
+                KeyPressedEvent e(key, 0);
+                ww->m_EventCallback(e);
+                break;
+            }
+            case GLFW_RELEASE: {
+                KeyReleasedEvent e(key);
+                ww->m_EventCallback(e);
+                break;
+            }
+            case GLFW_REPEAT: {
+                KeyPressedEvent e(key, 1);
+                ww->m_EventCallback(e);
+                break;
+            }
+            }
+            });
+
+        glfwSetCharCallback(m_Window, [](GLFWwindow* window, unsigned int codepoint) {
+            auto* ww = (WindowsWindow*)glfwGetWindowUserPointer(window);
+            if (!ww->m_EventCallback) return;
+            KeyTypedEvent e((int)codepoint);
+            ww->m_EventCallback(e);
+            });
+
+        // ---- Mouse events ----
+        glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double x, double y) {
+            auto* ww = (WindowsWindow*)glfwGetWindowUserPointer(window);
+            if (!ww->m_EventCallback) return;
+            MouseMovedEvent e((float)x, (float)y);
+            ww->m_EventCallback(e);
+            });
+
+        glfwSetScrollCallback(m_Window, [](GLFWwindow* window, double xoff, double yoff) {
+            auto* ww = (WindowsWindow*)glfwGetWindowUserPointer(window);
+            if (!ww->m_EventCallback) return;
+            MouseScrolledEvent e((float)xoff, (float)yoff);
+            ww->m_EventCallback(e);
+            });
+
+        glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int /*mods*/) {
+            auto* ww = (WindowsWindow*)glfwGetWindowUserPointer(window);
+            if (!ww->m_EventCallback) return;
+
+            if (action == GLFW_PRESS) {
+                MouseButtonPressedEvent e(button);
+                ww->m_EventCallback(e);
+            }
+            else if (action == GLFW_RELEASE) {
+                MouseButtonReleasedEvent e(button);
+                ww->m_EventCallback(e);
+            }
+            });
 
         std::cout << "OpenGL Vendor:   " << glGetString(GL_VENDOR) << "\n";
         std::cout << "OpenGL Renderer: " << glGetString(GL_RENDERER) << "\n";
@@ -77,9 +145,6 @@ namespace Engine {
             glfwDestroyWindow(m_Window);
             m_Window = nullptr;
         }
-
-        // Optional: only terminate when your last window is destroyed.
-        // For now, single-window app => ok.
         if (s_GLFWInitialized) {
             glfwTerminate();
             s_GLFWInitialized = false;
