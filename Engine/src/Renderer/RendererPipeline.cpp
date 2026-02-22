@@ -24,40 +24,42 @@ namespace Engine {
         m_Width = width;
         m_Height = height;
 
-        if (!m_SceneFB) {
-            // RGBA8 scene color
+        if (!m_SceneFB)
             m_SceneFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height, FramebufferColorFormat::RGBA8 });
-        }
-        else {
+        else
             m_SceneFB->Resize(width, height);
-        }
 
-        // This shader is only needed for PresentToScreen() (fullscreen)
-        if (!m_ScreenShader) {
+        if (!m_ScreenShader)
             m_ScreenShader = std::make_shared<Shader>("Assets/Shaders/Screen.shader");
-        }
     }
 
     void RendererPipeline::EnsurePickingResources(uint32_t width, uint32_t height) {
         m_Width = width;
         m_Height = height;
 
-        if (!m_IDFB) {
-            // R32UI ID buffer
+        if (!m_IDFB)
             m_IDFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height, FramebufferColorFormat::R32UI });
-        }
-        else {
+        else
             m_IDFB->Resize(width, height);
-        }
 
         if (!m_IDShader) {
             m_IDShader = std::make_shared<Shader>("Assets/Shaders/ID.shader");
             m_IDMaterial = std::make_shared<Material>(m_IDShader);
-            m_IDMaterial->SetColor({ 1,1,1,1 }); // harmless
+            m_IDMaterial->SetColor({ 1,1,1,1 });
         }
     }
 
-    // ------------------------- Scene pass -------------------------
+    void RendererPipeline::EnsureCompositeResources(uint32_t width, uint32_t height) {
+        m_Width = width;
+        m_Height = height;
+
+        if (!m_CompositeFB)
+            m_CompositeFB = std::make_unique<Framebuffer>(FramebufferSpec{ width, height, FramebufferColorFormat::RGBA8 });
+        else
+            m_CompositeFB->Resize(width, height);
+    }
+
+    // ---------------- Scene pass ----------------
 
     void RendererPipeline::BeginScenePass(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
         EnsureSceneResources(width, height);
@@ -72,28 +74,61 @@ namespace Engine {
     }
 
     void RendererPipeline::EndScenePass() {
-        if (!m_ScenePassActive)
-            return;
-
+        if (!m_ScenePassActive) return;
         Renderer::EndScene();
         m_ScenePassActive = false;
     }
 
-    void RendererPipeline::RenderToScreen(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
-        BeginScenePass(width, height, camera);
-        // caller submits between Begin/End; this function is just compatibility
-        EndScenePass();
-        PresentToScreen();
+    // ---------------- Picking pass ----------------
+
+    void RendererPipeline::BeginPickingPass(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
+        EnsurePickingResources(width, height);
+
+        m_IDFB->Bind();
+        RenderCommand::SetViewport(0, 0, width, height);
+
+        m_IDFB->ClearUInt(0);
+        Renderer::BeginScene(camera);
+        m_PickingPassActive = true;
     }
 
-    // ------------------------- Present pass -------------------------
+    void RendererPipeline::EndPickingPass() {
+        if (!m_PickingPassActive) return;
+        Renderer::EndScene();
+        m_PickingPassActive = false;
+    }
+
+    uint32_t RendererPipeline::ReadPickingID(uint32_t mouseX, uint32_t mouseY) const {
+        if (!m_IDFB) return 0;
+        if (mouseX >= m_Width || mouseY >= m_Height) return 0;
+
+        uint32_t x = mouseX;
+        uint32_t y = (m_Height - 1) - mouseY; // top-left -> bottom-left
+        return m_IDFB->ReadPixelUInt(x, y);
+    }
+
+    // ---------------- Compose + Present ----------------
+
+    void RendererPipeline::Compose() {
+        if (!m_SceneFB || !m_ScreenShader || !m_ScreenQuadVAO) return;
+        EnsureCompositeResources(m_Width, m_Height);
+
+        m_CompositeFB->Bind();
+        RenderCommand::SetViewport(0, 0, m_Width, m_Height);
+        RenderCommand::SetClearColor(0.f, 0.f, 0.f, 1.f);
+        RenderCommand::Clear();
+
+        glDisable(GL_DEPTH_TEST);
+        DrawFullscreen();
+        glEnable(GL_DEPTH_TEST);
+    }
+
+    uint32_t RendererPipeline::GetCompositeTexture() const {
+        return m_CompositeFB ? m_CompositeFB->GetColorAttachmentRendererID() : 0;
+    }
 
     void RendererPipeline::PresentToScreen() {
-        // You can call this even if you plan to show the texture in ImGui.
-        // In editor, you'll likely skip PresentToScreen() and just use GetSceneColorTexture().
-
-        if (!m_SceneFB || !m_ScreenShader || !m_ScreenQuadVAO)
-            return;
+        if (!m_SceneFB || !m_ScreenShader || !m_ScreenQuadVAO) return;
 
         Framebuffer::BindDefault();
         RenderCommand::SetViewport(0, 0, m_Width, m_Height);
@@ -108,72 +143,22 @@ namespace Engine {
     void RendererPipeline::DrawFullscreen() {
         m_ScreenShader->Bind();
 
-        // Scene color
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_SceneFB->GetColorAttachmentRendererID());
         m_ScreenShader->SetInt("u_Scene", 0);
 
-        // ID buffer (optional). Needed for outline.
         glActiveTexture(GL_TEXTURE1);
         if (m_IDFB)
             glBindTexture(GL_TEXTURE_2D, m_IDFB->GetColorAttachmentRendererID());
         else
             glBindTexture(GL_TEXTURE_2D, 0);
-
         m_ScreenShader->SetInt("u_ID", 1);
 
-        // Selection (0 disables outline)
         m_ScreenShader->SetUInt("u_SelectedID", m_SelectedID);
-
-        // Outline color (tweak as you like)
         m_ScreenShader->SetFloat3("u_OutlineColor", 1.0f, 0.85f, 0.1f);
 
         m_ScreenQuadVAO->Bind();
         RenderCommand::DrawIndexed(m_ScreenQuadVAO->GetIndexBuffer()->GetCount());
-    }
-
-    // ------------------------- Picking pass -------------------------
-
-    void RendererPipeline::BeginPickingPass(uint32_t width, uint32_t height, const PerspectiveCamera& camera) {
-        EnsurePickingResources(width, height);
-
-        m_IDFB->Bind();
-        RenderCommand::SetViewport(0, 0, width, height);
-
-        // Clear ID buffer to 0 ("nothing")
-        m_IDFB->ClearUInt(0);
-
-        Renderer::BeginScene(camera);
-        m_PickingPassActive = true;
-    }
-
-    void RendererPipeline::EndPickingPass() {
-        if (!m_PickingPassActive)
-            return;
-
-        Renderer::EndScene();
-        m_PickingPassActive = false;
-    }
-
-    uint32_t RendererPipeline::ReadPickingID(uint32_t mouseX, uint32_t mouseY) const {
-        if (!m_IDFB) return 0;
-        if (mouseX >= m_Width || mouseY >= m_Height) return 0;
-
-        // Convert mouse (top-left origin) to OpenGL (bottom-left origin)
-        uint32_t x = mouseX;
-        uint32_t y = (m_Height - 1) - mouseY;
-
-        return m_IDFB->ReadPixelUInt(x, y);
-    }
-
-    // ------------------------- Texture getters -------------------------
-
-    uint32_t RendererPipeline::GetSceneColorTexture() const {
-        return m_SceneFB ? m_SceneFB->GetColorAttachmentRendererID() : 0;
-    }
-
-    uint32_t RendererPipeline::GetIDTexture() const {
-        return m_IDFB ? m_IDFB->GetColorAttachmentRendererID() : 0;
     }
 
 } // namespace Engine
