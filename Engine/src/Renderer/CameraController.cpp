@@ -82,4 +82,13 @@ namespace Engine {
         return glm::normalize(glm::cross(forward, glm::vec3(0, 1, 0)));
     }
 
+    void CameraController::SetTransform(const glm::vec3& position, float yawRadians, float pitchRadians) {
+        m_Position = position;
+        m_Yaw = yawRadians;
+        m_Pitch = pitchRadians;
+        m_FirstMouse = true; // prevents jump next time you activate look
+        m_Camera.SetPosition(m_Position);
+        m_Camera.SetRotation(m_Yaw, m_Pitch);
+    }
+
 } // namespace Engine

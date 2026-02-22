@@ -21,6 +21,8 @@ out vec4 FragColor;
 uniform float u_GridScale;     // e.g. 1.0
 uniform vec3  u_GridColor;     // line color
 uniform vec3  u_BaseColor;     // base fill color
+uniform float u_Opacity;  // add near other uniforms
+
 
 float gridLine(vec2 coord) {
     // Antialiased grid using derivatives
@@ -41,5 +43,5 @@ void main() {
 
     vec3 col = mix(u_BaseColor, u_GridColor, line);
 
-    FragColor = vec4(col, 1.0);
+    FragColor = vec4(col, u_Opacity);
 }

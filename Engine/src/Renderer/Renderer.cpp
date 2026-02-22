@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <glad/glad.h>
+
 namespace Engine {
 
     glm::mat4 Renderer::s_ViewProjection{ 1.0f };
@@ -70,7 +72,18 @@ namespace Engine {
             cmd.VaoPtr->Bind();
             auto count = cmd.VaoPtr->GetIndexBuffer()->GetCount();
             if (count == 0) continue;
+
+            // Two Sided Drawing
+            bool restoreCull = false;
+            if (mat->IsTwoSided() && glIsEnabled(GL_CULL_FACE)) {
+                glDisable(GL_CULL_FACE);
+                restoreCull = true;
+            }
+
             RenderCommand::DrawIndexed(count);
+
+            if (restoreCull)
+                glEnable(GL_CULL_FACE);
         }
 
 

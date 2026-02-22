@@ -22,6 +22,7 @@ namespace Engine {
 
         Entity CreateEntity(const char* name = "Entity");
         Entity CreateEntityWithUUID(UUID id, const char* name = "Entity");
+        Entity DuplicateEntity(Entity src);
         void DestroyEntity(Entity entity);
 
         void Clear();
@@ -34,7 +35,7 @@ namespace Engine {
 
         void OnRenderPicking(const PerspectiveCamera& camera,
             const std::shared_ptr<Material>& idMaterial);
-
+        
     private:
         entt::registry m_Registry;
     };

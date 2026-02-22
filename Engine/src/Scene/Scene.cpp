@@ -166,4 +166,27 @@ namespace Engine {
             });
     }
 
+    Entity Scene::DuplicateEntity(Entity src) {
+        if (!src) return {};
+
+        // Name: "<Tag> Copy" if Tag exists
+        std::string name = "Entity Copy";
+        if (src.HasComponent<TagComponent>())
+            name = src.GetComponent<TagComponent>().Tag + " Copy";
+
+        Entity dst = CreateEntity(name.c_str());
+
+        // Copy known components
+        if (src.HasComponent<TransformComponent>())
+            dst.GetComponent<TransformComponent>() = src.GetComponent<TransformComponent>();
+
+        if (src.HasComponent<MeshRendererComponent>())
+            dst.AddComponent<MeshRendererComponent>(src.GetComponent<MeshRendererComponent>());
+
+        if (src.HasComponent<DirectionalLightComponent>())
+            dst.AddComponent<DirectionalLightComponent>(src.GetComponent<DirectionalLightComponent>());
+
+        return dst;
+    }
+
 } // namespace Engine

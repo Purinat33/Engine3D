@@ -23,10 +23,11 @@
 
 #include <chrono>
 #include <iostream>
+#include <cmath>
 
 using namespace Engine;
 
-enum class GizmoMode { None, Translate };
+enum class GizmoMode { None, Translate, Rotate, Scale };
 
 static std::shared_ptr<VertexArray> CreateGridPlaneVAO(float halfSize) {
     float v[] = {
@@ -35,9 +36,9 @@ static std::shared_ptr<VertexArray> CreateGridPlaneVAO(float halfSize) {
          halfSize, 0.f,  halfSize,
         -halfSize, 0.f,  halfSize
     };
-
-    // OLD: { 0, 1, 2, 2, 3, 0 }  // faces -Y with your winding
-    uint32_t idx[] = { 0, 2, 1, 0, 3, 2 }; // faces +Y (visible from above)
+    uint32_t idx[] = {
+    0, 1, 2, 0, 2, 3    // -Y facing
+    };
 
     auto vao = std::make_shared<VertexArray>();
     auto vb = std::make_shared<VertexBuffer>(v, sizeof(v));
@@ -48,6 +49,18 @@ static std::shared_ptr<VertexArray> CreateGridPlaneVAO(float halfSize) {
     vao->SetIndexBuffer(ib);
     return vao;
 }
+
+// Same folding you use in Scene picking
+static uint32_t FoldUUIDToPickID(UUID id) {
+    uint32_t v = (uint32_t)(id ^ (id >> 32));
+    return v == 0 ? 1u : v;
+}
+
+static float SnapFloat(float v, float step) {
+    if (step <= 0.0f) return v;
+    return std::round(v / step) * step;
+}
+
 int main() {
     auto window = Window::Create({ "Engine3D Editor", 1600, 900 });
     Renderer::Init();
@@ -55,28 +68,26 @@ int main() {
     bool running = true;
     bool ctrlDown = false;
 
-    // Mouse state
     float mouseX = 0.f, mouseY = 0.f;
 
-    // Camera control gating
     bool cameraControl = false;
 
-    // Selection
     uint32_t selectedID = 0;
     Entity selectedEntity{};
 
-    // Gizmo
     GizmoMode gizmo = GizmoMode::None;
     bool dragging = false;
+
     float dragStartX = 0.f, dragStartY = 0.f;
     glm::vec3 dragStartTranslation{ 0.f };
+    glm::vec3 dragStartRotation{ 0.f };
+    glm::vec3 dragStartScale{ 1.f };
 
     // Scene + serializer
     Scene scene;
     SceneSerializer serializer(scene);
     const std::string scenePath = "Assets/Scenes/Sandbox.scene";
 
-    // If scene doesn't exist yet, create default
     if (!serializer.Deserialize(scenePath)) {
         std::cout << "[Editor] No scene found. Creating default...\n";
         auto& assets = AssetManager::Get();
@@ -95,16 +106,33 @@ int main() {
         serializer.Serialize(scenePath);
     }
 
-    // Editor camera + pipeline
     CameraController editorCam(1.0472f, 1600.0f / 900.0f, 0.1f, 300.0f);
+    editorCam.SetTransform(glm::vec3(0.0f, 8.0f, 8.0f), -3.1415926f, -0.75f);
     RendererPipeline pipeline;
 
-    // Grid resources
+    // Grid
     auto gridShader = std::make_shared<Shader>("Assets/Shaders/Grid.shader");
     auto gridMat = std::make_shared<Material>(gridShader);
-    auto gridVAO = CreateGridPlaneVAO(300.0f);
+    gridMat->SetTwoSided(true);
+    auto gridVAO = CreateGridPlaneVAO(100.0f);
 
-    // Events
+    auto updateSelection = [&](uint32_t pickID) {
+        selectedID = pickID;
+        pipeline.SetSelectedID(selectedID);
+
+        if (selectedID == 0) {
+            selectedEntity = {};
+            gizmo = GizmoMode::None;
+            dragging = false;
+            return;
+        }
+        selectedEntity = scene.FindEntityByPickID(selectedID);
+        if (!selectedEntity) {
+            selectedID = 0;
+            pipeline.SetSelectedID(0);
+        }
+        };
+
     window->SetEventCallback([&](Event& e) {
         EventDispatcher d(e);
 
@@ -120,7 +148,7 @@ int main() {
             });
 
         d.Dispatch<MouseButtonPressedEvent>([&](MouseButtonPressedEvent& mb) {
-            // RMB -> camera mode
+            // RMB = camera mode
             if (mb.GetMouseButton() == 1) {
                 cameraControl = true;
                 return true;
@@ -128,29 +156,22 @@ int main() {
 
             // LMB
             if (mb.GetMouseButton() == 0) {
-                // If translate gizmo active & we have a selection, start dragging
-                if (gizmo == GizmoMode::Translate && selectedEntity) {
+                // If gizmo active and selected, start dragging
+                if (gizmo != GizmoMode::None && selectedEntity) {
                     dragging = true;
                     dragStartX = mouseX;
                     dragStartY = mouseY;
-                    dragStartTranslation = selectedEntity.GetComponent<TransformComponent>().Translation;
+
+                    auto& tc = selectedEntity.GetComponent<TransformComponent>();
+                    dragStartTranslation = tc.Translation;
+                    dragStartRotation = tc.Rotation;
+                    dragStartScale = tc.Scale;
                     return true;
                 }
 
                 // Otherwise do picking
                 uint32_t id = pipeline.ReadPickingID((uint32_t)mouseX, (uint32_t)mouseY);
-                selectedID = id;
-                pipeline.SetSelectedID(selectedID);
-
-                if (selectedID == 0) {
-                    selectedEntity = {};
-                    gizmo = GizmoMode::None;
-                    dragging = false;
-                }
-                else {
-                    selectedEntity = scene.FindEntityByPickID(selectedID);
-                }
-
+                updateSelection(id);
                 std::cout << "[Pick] ID = " << selectedID << "\n";
                 return true;
             }
@@ -185,27 +206,58 @@ int main() {
             if (ctrlDown && key == GLFW_KEY_R) {
                 std::cout << "[Editor] Reload: " << scenePath << "\n";
                 serializer.Deserialize(scenePath);
-
-                // selection invalid after reload
-                selectedID = 0;
-                selectedEntity = {};
-                pipeline.SetSelectedID(0);
-                gizmo = GizmoMode::None;
-                dragging = false;
-
+                updateSelection(0);
                 return true;
             }
 
-            // Gizmo: G = translate
-            if (key == GLFW_KEY_G) {
+            // Duplicate selected: Ctrl + D
+            if (ctrlDown && key == GLFW_KEY_D) {
                 if (selectedEntity) {
-                    gizmo = GizmoMode::Translate;
-                    std::cout << "[Gizmo] Translate\n";
+                    Entity copy = scene.DuplicateEntity(selectedEntity);
+                    if (copy) {
+                        // Select new copy
+                        uint32_t id = FoldUUIDToPickID(copy.GetComponent<IDComponent>().ID);
+                        updateSelection(id);
+                        std::cout << "[Editor] Duplicated entity. New PickID=" << id << "\n";
+                    }
                 }
                 return true;
             }
 
-            // Esc: exit gizmo (or quit if none)
+            // Delete selected
+            if (key == GLFW_KEY_DELETE) {
+                if (selectedEntity) {
+                    scene.DestroyEntity(selectedEntity);
+                    updateSelection(0);
+                    std::cout << "[Editor] Deleted entity.\n";
+                }
+                return true;
+            }
+
+            // Don’t switch gizmo while flying camera
+            if (cameraControl) return false;
+
+            // Gizmo modes
+            if (key == GLFW_KEY_G) {
+                gizmo = selectedEntity ? GizmoMode::Translate : GizmoMode::None;
+                dragging = false;
+                std::cout << "[Gizmo] Translate\n";
+                return true;
+            }
+            if (key == GLFW_KEY_R) {
+                gizmo = selectedEntity ? GizmoMode::Rotate : GizmoMode::None;
+                dragging = false;
+                std::cout << "[Gizmo] Rotate\n";
+                return true;
+            }
+            if (key == GLFW_KEY_F) {
+                gizmo = selectedEntity ? GizmoMode::Scale : GizmoMode::None;
+                dragging = false;
+                std::cout << "[Gizmo] Scale\n";
+                return true;
+            }
+
+            // Esc: cancel gizmo or exit
             if (key == GLFW_KEY_ESCAPE) {
                 if (gizmo != GizmoMode::None) {
                     gizmo = GizmoMode::None;
@@ -213,10 +265,8 @@ int main() {
                     std::cout << "[Gizmo] None\n";
                     return true;
                 }
-                else {
-                    running = false;
-                    return true;
-                }
+                running = false;
+                return true;
             }
 
             return false;
@@ -230,7 +280,6 @@ int main() {
             });
         });
 
-    // Timing
     auto last = std::chrono::high_resolution_clock::now();
 
     while (running && !window->ShouldClose()) {
@@ -238,56 +287,99 @@ int main() {
         float dt = std::chrono::duration<float>(now - last).count();
         last = now;
 
-        // Camera only active while RMB held
+        // Camera active only when RMB held
         editorCam.SetActive(cameraControl);
         editorCam.OnUpdate(dt);
 
-        // Cursor lock only while camera control is active
         GLFWwindow* native = (GLFWwindow*)window->GetNativeWindow();
         glfwSetInputMode(native, GLFW_CURSOR, cameraControl ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 
-        // If dragging translate gizmo, move selected entity on XZ plane
-        if (dragging && gizmo == GizmoMode::Translate && selectedEntity) {
+        // Apply gizmo drag
+        if (dragging && gizmo != GizmoMode::None && selectedEntity) {
             float dx = mouseX - dragStartX;
             float dy = mouseY - dragStartY;
 
-            // Camera-relative movement projected to XZ plane
-            glm::vec3 right = editorCam.GetRight();   right.y = 0.f;
-            glm::vec3 fwd = editorCam.GetForward(); fwd.y = 0.f;
+            auto& tc = selectedEntity.GetComponent<TransformComponent>();
 
-            float rl = glm::length(right);
-            float fl = glm::length(fwd);
-            if (rl > 0.0001f) right /= rl; else right = { 1,0,0 };
-            if (fl > 0.0001f) fwd /= fl; else fwd = { 0,0,-1 };
+            bool snap = ctrlDown;
 
-            glm::vec3 camPos = editorCam.GetPosition();
-            glm::vec3 objPos = dragStartTranslation;
-            float dist = glm::length(objPos - camPos);
-            if (dist < 1.0f) dist = 1.0f;
+            if (gizmo == GizmoMode::Translate) {
+                glm::vec3 right = editorCam.GetRight();   right.y = 0.f;
+                glm::vec3 fwd = editorCam.GetForward(); fwd.y = 0.f;
 
-            float scale = 0.0020f * dist; // feel tweak
-            glm::vec3 delta = (right * dx + fwd * (-dy)) * scale;
+                float rl = glm::length(right);
+                float fl = glm::length(fwd);
+                if (rl > 0.0001f) right /= rl; else right = { 1,0,0 };
+                if (fl > 0.0001f) fwd /= fl; else fwd = { 0,0,-1 };
 
-            selectedEntity.GetComponent<TransformComponent>().Translation = dragStartTranslation + delta;
+                glm::vec3 camPos = editorCam.GetPosition();
+                glm::vec3 objPos = dragStartTranslation;
+                float dist = glm::length(objPos - camPos);
+                if (dist < 1.0f) dist = 1.0f;
+
+                float scale = 0.0020f * dist;
+                glm::vec3 delta = (right * dx + fwd * (-dy)) * scale;
+
+                glm::vec3 out = dragStartTranslation + delta;
+
+                if (snap) {
+                    const float step = 0.5f;
+                    out.x = SnapFloat(out.x, step);
+                    out.z = SnapFloat(out.z, step);
+                }
+
+                tc.Translation = out;
+            }
+            else if (gizmo == GizmoMode::Rotate) {
+                // Yaw rotation from mouse X
+                float speed = 0.01f;
+                float yaw = dragStartRotation.y + dx * speed;
+
+                if (snap) {
+                    // 15 degrees
+                    float step = 3.1415926f / 12.0f;
+                    yaw = SnapFloat(yaw, step);
+                }
+
+                tc.Rotation.y = yaw;
+            }
+            else if (gizmo == GizmoMode::Scale) {
+                // Uniform scale from mouse Y
+                float speed = 0.01f;
+                float s = 1.0f + (-dy) * speed;
+                if (s < 0.05f) s = 0.05f;
+
+                glm::vec3 out = dragStartScale * s;
+
+                if (snap) {
+                    const float step = 0.1f;
+                    out.x = SnapFloat(out.x, step);
+                    out.y = SnapFloat(out.y, step);
+                    out.z = SnapFloat(out.z, step);
+                }
+
+                tc.Scale = out;
+            }
         }
 
-        // ----- Build picking buffer first (for outline + click correctness)
+        // Picking pass
         pipeline.BeginPickingPass(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
         scene.OnRenderPicking(editorCam.GetCamera(), pipeline.GetIDMaterial());
         pipeline.EndPickingPass();
 
-        // ----- Normal render + present (uses ID buffer + SelectedID for outline)
+        // Normal render (outline uses ID buffer + selectedID)
         pipeline.BeginFrame(window->GetWidth(), window->GetHeight(), editorCam.GetCamera());
 
-        // Grid draw first (so meshes draw over it)
+        // Grid
         gridShader->Bind();
-        gridShader->SetFloat("u_GridScale", 1.0f); // if you don’t have SetFloat, use SetFloat3/SetFloat4 pattern or add SetFloat
+        gridShader->SetFloat("u_GridScale", 1.0f);
         gridShader->SetFloat3("u_GridColor", 0.45f, 0.45f, 0.45f);
         gridShader->SetFloat3("u_BaseColor", 0.12f, 0.12f, 0.12f);
+        gridShader->SetFloat("u_Opacity", 0.30f);
         Renderer::Submit(gridMat, gridVAO, glm::mat4(1.0f));
 
         scene.OnUpdate(dt);
-        scene.OnRender(editorCam.GetCamera()); // submits scene meshes
+        scene.OnRender(editorCam.GetCamera());
 
         pipeline.EndFrame();
         window->OnUpdate();

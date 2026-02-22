@@ -25,6 +25,8 @@ namespace Engine {
         glm::vec3 GetForward() const;
         glm::vec3 GetRight() const;
 
+        void SetTransform(const glm::vec3& position, float yawRadians, float pitchRadians);
+
     private:
         PerspectiveCamera m_Camera;
         bool m_Active = true;

@@ -23,11 +23,13 @@ namespace Engine {
 
         void SetTexture(uint32_t slot, const std::shared_ptr<Texture2D>& tex);
         const std::unordered_map<uint32_t, std::shared_ptr<Texture2D>>& GetTextures() const { return m_Textures; }
-
+        void SetTwoSided(bool v) { m_TwoSided = v; }
+        bool IsTwoSided() const { return m_TwoSided; }
     private:
         std::shared_ptr<Shader> m_Shader;
 
         bool m_HasColor = false;
+        bool m_TwoSided = false;
         glm::vec4 m_Color{ 1.0f };
 
         std::unordered_map<uint32_t, std::shared_ptr<Texture2D>> m_Textures;
