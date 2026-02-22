@@ -11,6 +11,7 @@
 #include "Engine/Renderer/Texture2D.h"
 #include "Engine/Renderer/Material.h"
 #include "Engine/Renderer/Model.h"
+#include "Engine/Renderer/CameraController.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -24,28 +25,33 @@ namespace Engine {
     }
 
     void Application::Run() {
+        CameraController camCtrl(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
+
         ShaderLibrary shaders;
         auto litShader = shaders.Load("Assets/Shaders/Lit.glsl"); // or .glsl
         Model model3d("Assets/Models/monkey.obj", litShader);
 
 
-        PerspectiveCamera camera(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
-        camera.SetPosition({ 0.0f, 0.0f, 3.0f });
-
         auto start = std::chrono::high_resolution_clock::now();
+        auto last = start;
 
         while (!m_Window->ShouldClose()) {
+
+            auto now = std::chrono::high_resolution_clock::now();
+            float dt = std::chrono::duration<float>(now - last).count();
+            last = now;
+
+            float t = std::chrono::duration<float>(now - start).count();
+
+            camCtrl.OnUpdate(dt);
+
             RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
             RenderCommand::SetClearColor(0.08f, 0.10f, 0.12f, 1.0f);
             RenderCommand::Clear();
 
-            Renderer::BeginScene(camera);
+            // Use camera controller camera:
+            Renderer::BeginScene(camCtrl.GetCamera());
 
-            // time in seconds
-            auto now = std::chrono::high_resolution_clock::now();
-            float t = std::chrono::duration<float>(now - start).count();
-
-            // Light params
             litShader->Bind();
             litShader->SetFloat3("u_LightDir", 0.4f, 0.8f, -0.3f);
             litShader->SetFloat3("u_LightColor", 1.0f, 1.0f, 1.0f);
@@ -60,5 +66,6 @@ namespace Engine {
             Renderer::EndScene();
             m_Window->OnUpdate();
         }
+        
     }
 }

@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "WindowsWindow.h"
-
+#include "Engine/Core/Input.h"
 // Keep GLFW from including legacy GL headers
 #ifndef GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_NONE
@@ -55,9 +55,13 @@ namespace Engine {
         if (!m_Window) {
             throw std::runtime_error("Failed to create GLFW window");
         }
+        glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
         glfwMakeContextCurrent(m_Window);
         glfwSwapInterval(1); // vsync
+
+        Engine::SetNativeGLFWWindow(m_Window);
+        
 
         if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
             throw std::runtime_error("Failed to initialize glad");
