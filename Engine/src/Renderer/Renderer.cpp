@@ -6,6 +6,7 @@
 #include "Engine/Renderer/VertexArray.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
 #include "Engine/Renderer/Texture2D.h"
+#include "Engine/Renderer/Material.h"
 
 #include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
@@ -24,21 +25,17 @@ namespace Engine {
         s_DrawList.clear();
     }
 
-    void Renderer::Submit(const std::shared_ptr<Shader>& shader,
+    void Renderer::Submit(const std::shared_ptr<Material>& material,
         const std::shared_ptr<VertexArray>& vao,
-        const glm::mat4& model,
-        const glm::vec4& color,
-        const std::shared_ptr<Texture2D>& texture) {
-        // Sort by ShaderID then VAO ID to reduce binds
-        uint64_t key = (uint64_t(shader->GetRendererID()) << 32) | uint64_t(vao->GetRendererID());
+        const glm::mat4& model) {
+        // Sort by Shader + VAO (good enough for now)
+        uint64_t key = (uint64_t(material->GetShader()->GetRendererID()) << 32) | uint64_t(vao->GetRendererID());
 
         DrawCommand cmd;
         cmd.SortKey = key;
-        cmd.ShaderPtr = shader;
+        cmd.MaterialPtr = material;
         cmd.VaoPtr = vao;
         cmd.Model = model;
-        cmd.Color = color;
-        cmd.Texture = texture;
         s_DrawList.push_back(std::move(cmd));
     }
 
@@ -50,23 +47,30 @@ namespace Engine {
 
     void Renderer::Flush() {
         for (const auto& cmd : s_DrawList) {
-            cmd.ShaderPtr->Bind();
-            cmd.ShaderPtr->SetMat4("u_ViewProjection", glm::value_ptr(s_ViewProjection));
-            cmd.ShaderPtr->SetMat4("u_Model", glm::value_ptr(cmd.Model));
+            auto& mat = cmd.MaterialPtr;
+            auto& shader = mat->GetShader();
 
-            cmd.ShaderPtr->SetFloat4("u_Color", cmd.Color.r, cmd.Color.g, cmd.Color.b, cmd.Color.a);
+            shader->Bind();
+            shader->SetMat4("u_ViewProjection", glm::value_ptr(s_ViewProjection));
+            shader->SetMat4("u_Model", glm::value_ptr(cmd.Model));
 
-            if (cmd.Texture) {
-                cmd.Texture->Bind(0);
-                cmd.ShaderPtr->SetInt("u_Texture", 0);
+            // Bind textures (slot -> u_Texture{slot})
+            for (const auto& kv : mat->GetTextures()) {
+                uint32_t slot = kv.first;
+                const auto& tex = kv.second;
+                if (!tex) continue;
+
+                tex->Bind(slot);
+                shader->SetInt("u_Texture" + std::to_string(slot), (int)slot);
             }
-            else {
-                cmd.ShaderPtr->SetFloat4("u_Color", cmd.Color.r, cmd.Color.g, cmd.Color.b, cmd.Color.a);
+
+            if (mat->HasColor()) {
+                const auto& c = mat->GetColor();
+                shader->SetFloat4("u_Color", c.r, c.g, c.b, c.a);
             }
 
             cmd.VaoPtr->Bind();
             RenderCommand::DrawIndexed(cmd.VaoPtr->GetIndexBuffer()->GetCount());
         }
     }
-
 } // namespace Engine

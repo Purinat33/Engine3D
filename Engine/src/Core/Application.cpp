@@ -3,12 +3,12 @@
 
 #include "Engine/Renderer/Renderer.h"
 #include "Engine/Renderer/RenderCommand.h"
-#include "Engine/Renderer/Shader.h"
 #include "Engine/Renderer/VertexArray.h"
 #include "Engine/Renderer/Buffer.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
 #include "Engine/Renderer/ShaderLibrary.h"
 #include "Engine/Renderer/Texture2D.h"
+#include "Engine/Renderer/Material.h"   // <-- add this
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -43,10 +43,13 @@ namespace Engine {
         auto ib = std::make_shared<IndexBuffer>(indices, 6);
         vao->SetIndexBuffer(ib);
 
+        // Load GPU resources ONCE
         ShaderLibrary shaders;
         auto texturedShader = shaders.Load("Assets/Shaders/Textured.glsl");
-
         auto texture = std::make_shared<Texture2D>("Assets/Textures/checker.png");
+
+        auto texturedMat = std::make_shared<Material>(texturedShader);
+        texturedMat->SetTexture(0, texture);
 
         PerspectiveCamera camera(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
         camera.SetPosition({ 0.0f, 0.0f, 3.0f });
@@ -59,15 +62,14 @@ namespace Engine {
             Renderer::BeginScene(camera);
 
             glm::mat4 model = glm::mat4(1.0f);
-            Renderer::Submit(texturedShader, vao, model, { 1,1,1,1 }, texture);
-
             glm::mat4 model2 = glm::translate(glm::mat4(1.0f), glm::vec3(1.1f, 0.0f, 0.0f));
-            Renderer::Submit(texturedShader, vao, model2, { 1,1,1,1 }, texture);
+
+            Renderer::Submit(texturedMat, vao, model);
+            Renderer::Submit(texturedMat, vao, model2);
 
             Renderer::EndScene();
             m_Window->OnUpdate();
         }
-        
     }
 
 } // namespace Engine
