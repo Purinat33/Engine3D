@@ -15,7 +15,8 @@ namespace Engine {
         KeyPressed, KeyReleased, KeyTyped,
 
         // Mouse
-        MouseButtonPressed, MouseButtonReleased, MouseMoved, MouseScrolled
+        MouseButtonPressed, MouseButtonReleased, MouseMoved, MouseScrolled,
+        WindowFocus
     };
 
     enum EventCategory {

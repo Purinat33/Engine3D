@@ -31,6 +31,9 @@ namespace Engine {
         virtual void* GetNativeWindow() const = 0;
 
         static std::unique_ptr<Window> Create(const WindowProps& props = WindowProps{});
+    
+        virtual void SetCursorMode(bool enabled) = 0; // enabled=true => lock/disable cursor (FPS)
+        virtual bool IsFocused() const = 0;
     };
 
 } // namespace Engine

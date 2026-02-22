@@ -28,12 +28,18 @@
 
 #include "Engine/Events/Event.h"
 #include "Engine/Events/ApplicationEvent.h"
+#include "Engine/Events/WindowFocusEvent.h"
+#include "Engine/Events/KeyEvent.h"
+#include "Engine/Events/MouseEvent.h"
+
+
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>             
 
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 
 namespace Engine {
 
@@ -49,10 +55,37 @@ namespace Engine {
         dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& ev) { return OnWindowClose(ev); });
         dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& ev) { return OnWindowResize(ev); });
 
-        // Optional: log events
-        // std::cout << e.ToString() << "\n";
-    }
+        dispatcher.Dispatch<WindowFocusEvent>([this](WindowFocusEvent& ev) {
+            m_HasFocus = ev.IsFocused();
+            if (!m_HasFocus) {
+                // Always release on focus loss
+                m_CaptureMouse = false;
+                m_Window->SetCursorMode(false);
+            }
+            return false;
+            });
 
+        // Optional: click to capture when focused
+        dispatcher.Dispatch<MouseButtonPressedEvent>([this](MouseButtonPressedEvent& mb) {
+            if (!m_HasFocus) return false;
+            if (mb.GetMouseButton() == 0) { // left click captures
+                m_CaptureMouse = true;
+                m_Window->SetCursorMode(true);
+                return true;
+            }
+            return false;
+            });
+
+        // Esc toggles capture
+        dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& ke) {
+            if (ke.GetKeyCode() == GLFW_KEY_ESCAPE) {
+                m_CaptureMouse = !m_CaptureMouse;
+                m_Window->SetCursorMode(m_CaptureMouse);
+                return true;
+            }
+            return false;
+            });
+    }
     bool Application::OnWindowClose(WindowCloseEvent&) {
         m_Running = false;
         return true;
@@ -96,6 +129,7 @@ namespace Engine {
 
         auto start = std::chrono::high_resolution_clock::now();
         auto last = start;
+        bool captureMouse = true;
 
         while (m_Running && !m_Window->ShouldClose()) {
             auto now = std::chrono::high_resolution_clock::now();
@@ -104,7 +138,11 @@ namespace Engine {
 
             float t = std::chrono::duration<float>(now - start).count();
 
-            camCtrl.OnUpdate(dt);
+            camCtrl.SetActive(m_HasFocus && m_CaptureMouse);
+            if (m_HasFocus && m_CaptureMouse)
+                camCtrl.OnUpdate(dt);
+
+            //camCtrl.OnUpdate(dt);
 
             // Spin monkey by updating its TransformComponent
             monkey.GetComponent<TransformComponent>().Rotation.y = t;

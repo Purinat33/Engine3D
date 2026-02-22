@@ -15,6 +15,9 @@ namespace Engine {
 
         void OnEvent(Event& e);
 
+        bool m_CaptureMouse = true;
+        bool m_HasFocus = true;
+
     private:
         bool OnWindowClose(WindowCloseEvent& e);
         bool OnWindowResize(WindowResizeEvent& e);

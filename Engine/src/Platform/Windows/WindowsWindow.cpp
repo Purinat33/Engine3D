@@ -11,6 +11,7 @@
 #include "Engine/Events/ApplicationEvent.h"
 #include "Engine/Events/KeyEvent.h"
 #include "Engine/Events/MouseEvent.h"
+#include "Engine/Events/WindowFocusEvent.h"
 
 namespace Engine {
 
@@ -135,6 +136,14 @@ namespace Engine {
             }
             });
 
+        glfwSetWindowFocusCallback(m_Window, [](GLFWwindow* window, int focused) {
+            auto* ww = (WindowsWindow*)glfwGetWindowUserPointer(window);
+            if (!ww->m_EventCallback) return;
+
+            WindowFocusEvent e(focused == GLFW_TRUE);
+            ww->m_EventCallback(e);
+            });
+
         std::cout << "OpenGL Vendor:   " << glGetString(GL_VENDOR) << "\n";
         std::cout << "OpenGL Renderer: " << glGetString(GL_RENDERER) << "\n";
         std::cout << "OpenGL Version:  " << glGetString(GL_VERSION) << "\n";
@@ -158,6 +167,14 @@ namespace Engine {
 
     bool WindowsWindow::ShouldClose() const {
         return glfwWindowShouldClose(m_Window) != 0;
+    }
+
+    void WindowsWindow::SetCursorMode(bool enabled) {
+        glfwSetInputMode(m_Window, GLFW_CURSOR, enabled ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    }
+
+    bool WindowsWindow::IsFocused() const {
+        return glfwGetWindowAttrib(m_Window, GLFW_FOCUSED) == GLFW_TRUE;
     }
 
 } // namespace Engine

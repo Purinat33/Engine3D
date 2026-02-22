@@ -20,6 +20,9 @@ namespace Engine {
 
         void* GetNativeWindow() const override { return m_Window; }
 
+        void SetCursorMode(bool enabled) override;
+        bool IsFocused() const override;
+
     private:
         void Init(const WindowProps& props);
         void Shutdown();
