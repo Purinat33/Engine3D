@@ -16,6 +16,8 @@
 #include "Engine/Renderer/Framebuffer.h"
 #include "Engine/Renderer/ScreenQuad.h"
 
+#include "Engine/Renderer/RendererPipeline.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>             
@@ -34,15 +36,14 @@ namespace Engine {
 
         ShaderLibrary shaders;
         auto litShader = shaders.Load("Assets/Shaders/Lit.glsl");
-        auto screenShader = shaders.Load("Assets/Shaders/Screen.shader");
+        
 
         Model model3d("Assets/Models/monkey.obj", litShader);
 
-        Framebuffer sceneFB({ 1280, 720 });
-        auto quadVAO = ScreenQuad::GetVAO();
-
         auto start = std::chrono::high_resolution_clock::now();
         auto last = start;
+
+        RendererPipeline pipeline;
 
         while (!m_Window->ShouldClose()) {
 
@@ -54,43 +55,23 @@ namespace Engine {
 
             camCtrl.OnUpdate(dt);
 
-            // Resize offscreen buffer to match window
-            sceneFB.Resize(m_Window->GetWidth(), m_Window->GetHeight());
+            glm::mat4 modelM(1.0f);
+            modelM = glm::rotate(modelM, t, glm::vec3(0.0f, 1.0f, 0.0f));
 
-            // ---- Pass 1: render scene to offscreen framebuffer ----
-            sceneFB.Bind();
-            RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
-            RenderCommand::SetClearColor(0.08f, 0.10f, 0.12f, 1.0f);
-            RenderCommand::Clear();
+            // Begin pipeline frame (does: bind scene FB, clear, BeginScene(camera))
+            pipeline.BeginFrame(m_Window->GetWidth(), m_Window->GetHeight(), camCtrl.GetCamera());
 
-            Renderer::BeginScene(camCtrl.GetCamera());
-
+            // Light params — set once per frame (shader is used by model materials)
             litShader->Bind();
             litShader->SetFloat3("u_LightDir", 0.4f, 0.8f, -0.3f);
             litShader->SetFloat3("u_LightColor", 1.0f, 1.0f, 1.0f);
 
-            glm::mat4 modelM(1.0f);
-            modelM = glm::rotate(modelM, t, glm::vec3(0.0f, 1.0f, 0.0f));
-
-            for (const auto& sm : model3d.GetSubMeshes()) {
+            for (const auto& sm : model3d.GetSubMeshes())
                 Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), modelM);
-            }
 
-            Renderer::EndScene();
+            // End pipeline frame (does: EndScene, bind default FB, draw screen quad)
+            pipeline.EndFrame();
 
-            // ---- Pass 2: present to screen ----
-            Framebuffer::BindDefault();
-            RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
-            RenderCommand::SetClearColor(0.f, 0.f, 0.f, 1.f);
-            RenderCommand::Clear();
-
-            screenShader->Bind();
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, sceneFB.GetColorAttachmentRendererID());
-            screenShader->SetInt("u_Scene", 0);
-
-            quadVAO->Bind();
-            RenderCommand::DrawIndexed(quadVAO->GetIndexBuffer()->GetCount());
             m_Window->OnUpdate();
         }
         
