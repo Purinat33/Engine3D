@@ -7,7 +7,8 @@
     "imgui",
     "entt",
     "assimp",
-    "stb"
+    "stb",
+    "nlohmann-json"
   ],
   "builtin-baseline": "05442024c3fda64320bd25d2251cc9807b84fb6f"
 }

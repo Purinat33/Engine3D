@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Engine/Scene/Scene.h"
 #include "Engine/Scene/Components.h"
+#include "Engine/Scene/UUID.h"
 
 #include "Engine/Assets/AssetManager.h"
 
@@ -15,9 +16,14 @@
 namespace Engine {
 
     Entity Scene::CreateEntity(const char* name) {
-        entt::entity e = m_Registry.create();
+        return CreateEntityWithUUID(GenerateUUID(), name);
+    }
 
+    Entity Scene::CreateEntityWithUUID(UUID id, const char* name) {
+        entt::entity e = m_Registry.create();
         Entity entity(e, &m_Registry);
+
+        entity.AddComponent<IDComponent>(id);
         entity.AddComponent<TransformComponent>();
         entity.AddComponent<TagComponent>(name ? name : "Entity");
         return entity;
@@ -26,6 +32,10 @@ namespace Engine {
     void Scene::DestroyEntity(Entity entity) {
         if (!entity) return;
         m_Registry.destroy(entity.GetHandle());
+    }
+
+    void Scene::Clear() {
+        m_Registry.clear();
     }
 
     void Scene::OnUpdate(float /*dt*/) {
@@ -38,7 +48,7 @@ namespace Engine {
         glm::vec3 lightDir{ 0.4f, 0.8f, -0.3f };
         glm::vec3 lightColor{ 1.0f };
 
-        // Grab first directional light, if any
+        // First directional light
         {
             auto lightView = m_Registry.view<DirectionalLightComponent>();
             bool found = false;
@@ -50,14 +60,12 @@ namespace Engine {
                 });
         }
 
-        // Collect unique shaders used by all renderables
+        // Unique shaders used this frame
         std::unordered_set<Shader*> uniqueShaders;
 
         auto renderView = m_Registry.view<TransformComponent, MeshRendererComponent>();
-
-        renderView.each([&](auto /*entity*/, TransformComponent& /*tc*/, MeshRendererComponent& mrc) {
+        renderView.each([&](auto /*entity*/, TransformComponent&, MeshRendererComponent& mrc) {
             if (mrc.Model == InvalidAssetHandle) return;
-
             auto model = assets.GetModel(mrc.Model);
             if (!model) return;
 
@@ -68,14 +76,12 @@ namespace Engine {
             }
             });
 
-        // Set light uniforms once per shader
         for (Shader* sh : uniqueShaders) {
             sh->Bind();
             sh->SetFloat3("u_LightDir", lightDir.x, lightDir.y, lightDir.z);
             sh->SetFloat3("u_LightColor", lightColor.x, lightColor.y, lightColor.z);
         }
 
-        // Submit renderables
         Renderer::BeginScene(camera);
 
         renderView.each([&](auto /*entity*/, TransformComponent& tc, MeshRendererComponent& mrc) {
@@ -93,6 +99,26 @@ namespace Engine {
             });
 
         Renderer::EndScene();
+    }
+
+    Entity Scene::FindEntityByUUID(UUID id) {
+        auto view = m_Registry.view<IDComponent>();
+        for (auto e : view) {
+            const auto& idc = view.get<IDComponent>(e);
+            if (idc.ID == id)
+                return Entity(e, &m_Registry);
+        }
+        return {};
+    }
+
+    Entity Scene::FindEntityByTag(const std::string& tag) {
+        auto view = m_Registry.view<TagComponent>();
+        for (auto e : view) {
+            const auto& tc = view.get<TagComponent>(e);
+            if (tc.Tag == tag)
+                return Entity(e, &m_Registry);
+        }
+        return {};
     }
 
 } // namespace Engine

@@ -24,6 +24,8 @@
 
 #include "Engine/Assets/AssetManager.h"
 
+#include "Engine/Scene/SceneSerializer.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>             
@@ -57,6 +59,14 @@ namespace Engine {
             glm::vec3(0.4f, 0.8f, -0.3f),
             glm::vec3(1.0f, 1.0f, 1.0f)
         );
+
+        SceneSerializer serializer(scene);
+        serializer.Serialize("Assets/Scenes/Sandbox.scene");
+
+        // OPTIONAL: test load immediately (into the same scene)
+        serializer.Deserialize("Assets/Scenes/Sandbox.scene");
+
+        monkey = scene.FindEntityByTag("Monkey");
 
         auto start = std::chrono::high_resolution_clock::now();
         auto last = start;

@@ -6,20 +6,25 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Engine/Assets/AssetHandle.h"
+#include "Engine/Scene/UUID.h"
 
 namespace Engine {
 
-    // Simple name/tag
+    struct IDComponent {
+        UUID ID = 0;
+        IDComponent() = default;
+        IDComponent(UUID id) : ID(id) {}
+    };
+
     struct TagComponent {
         std::string Tag;
         TagComponent() = default;
         TagComponent(const std::string& tag) : Tag(tag) {}
     };
 
-    // Basic transform (Euler rotation in radians)
     struct TransformComponent {
         glm::vec3 Translation{ 0.0f };
-        glm::vec3 Rotation{ 0.0f }; // pitch(x), yaw(y), roll(z) in radians
+        glm::vec3 Rotation{ 0.0f }; // radians
         glm::vec3 Scale{ 1.0f };
 
         glm::mat4 GetTransform() const {
@@ -32,17 +37,14 @@ namespace Engine {
         }
     };
 
-    // Renderable component: references a model asset by handle
     struct MeshRendererComponent {
         AssetHandle Model = InvalidAssetHandle;
-
         MeshRendererComponent() = default;
         MeshRendererComponent(AssetHandle modelHandle) : Model(modelHandle) {}
     };
 
-    // One directional light is enough for now
     struct DirectionalLightComponent {
-        glm::vec3 Direction{ 0.4f, 0.8f, -0.3f }; // points toward surfaces
+        glm::vec3 Direction{ 0.4f, 0.8f, -0.3f };
         glm::vec3 Color{ 1.0f };
 
         DirectionalLightComponent() = default;

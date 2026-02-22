@@ -16,8 +16,6 @@ namespace Engine {
     }
 
     std::string AssetManager::NormalizePath(const std::string& p) {
-        // Lightweight normalization: convert to backslashes, keep case as-is.
-        // (Windows is case-insensitive; good enough for now.)
         std::string out = p;
         std::replace(out.begin(), out.end(), '/', '\\');
         return out;
@@ -27,8 +25,7 @@ namespace Engine {
         return NormalizePath(path) + "|" + std::to_string(shaderHandle);
     }
 
-    // ------------------- Shaders -------------------
-
+    // Shaders
     AssetHandle AssetManager::LoadShader(const std::string& filepath) {
         std::string key = NormalizePath(filepath);
 
@@ -40,6 +37,7 @@ namespace Engine {
 
         m_ShaderKeyToHandle[key] = h;
         m_Shaders[h] = shader;
+        m_ShaderPath[h] = key;
         return h;
     }
 
@@ -51,8 +49,14 @@ namespace Engine {
         return it->second;
     }
 
-    // ------------------- Textures -------------------
+    const std::string& AssetManager::GetShaderPath(AssetHandle handle) const {
+        auto it = m_ShaderPath.find(handle);
+        if (it == m_ShaderPath.end())
+            throw std::runtime_error("GetShaderPath: invalid handle " + std::to_string(handle));
+        return it->second;
+    }
 
+    // Textures
     AssetHandle AssetManager::LoadTexture2D(const std::string& filepath) {
         std::string key = NormalizePath(filepath);
 
@@ -75,11 +79,10 @@ namespace Engine {
         return it->second;
     }
 
-    // ------------------- Models -------------------
-
+    // Models
     AssetHandle AssetManager::LoadModel(const std::string& filepath, AssetHandle defaultShaderHandle) {
         if (defaultShaderHandle == InvalidAssetHandle)
-            throw std::runtime_error("LoadModel: defaultShaderHandle is InvalidAssetHandle");
+            throw std::runtime_error("LoadModel: defaultShaderHandle invalid");
 
         std::string key = MakeModelKey(filepath, defaultShaderHandle);
 
@@ -92,6 +95,7 @@ namespace Engine {
 
         m_ModelKeyToHandle[key] = h;
         m_Models[h] = model;
+        m_ModelInfo[h] = ModelInfo{ NormalizePath(filepath), defaultShaderHandle };
         return h;
     }
 
@@ -100,6 +104,13 @@ namespace Engine {
         auto it = m_Models.find(handle);
         if (it == m_Models.end())
             throw std::runtime_error("GetModel: invalid handle " + std::to_string(handle));
+        return it->second;
+    }
+
+    AssetManager::ModelInfo AssetManager::GetModelInfo(AssetHandle handle) const {
+        auto it = m_ModelInfo.find(handle);
+        if (it == m_ModelInfo.end())
+            throw std::runtime_error("GetModelInfo: invalid handle " + std::to_string(handle));
         return it->second;
     }
 
