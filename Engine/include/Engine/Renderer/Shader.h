@@ -22,6 +22,8 @@ namespace Engine {
         void SetMat4(const std::string& name, const float* value4x4) const;
         void SetFloat4(const std::string& name, float x, float y, float z, float w) const;
 
+        void SetInt(const std::string& name, int value) const;
+
     private:
         uint32_t CompileStage(uint32_t type, const std::string& src);
         uint32_t CreateProgram(const std::string& vertexSrc, const std::string& fragmentSrc);

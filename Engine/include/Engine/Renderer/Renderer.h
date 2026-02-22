@@ -8,6 +8,7 @@ namespace Engine {
     class Shader;
     class VertexArray;
     class PerspectiveCamera;
+    class Texture2D;
 
     class Renderer {
     public:
@@ -17,7 +18,8 @@ namespace Engine {
         static void Submit(const std::shared_ptr<Shader>& shader,
             const std::shared_ptr<VertexArray>& vao,
             const glm::mat4& model,
-            const glm::vec4& color);
+            const glm::vec4& color = { 1,1,1,1 },
+            const std::shared_ptr<Texture2D>& texture = nullptr);
         static void EndScene(); // sorts + flushes
 
     private:
@@ -25,6 +27,7 @@ namespace Engine {
             uint64_t SortKey = 0;
             std::shared_ptr<Shader> ShaderPtr;
             std::shared_ptr<VertexArray> VaoPtr;
+            std::shared_ptr<Texture2D> Texture;
             glm::mat4 Model{ 1.0f };
             glm::vec4 Color{ 1.0f };
         };

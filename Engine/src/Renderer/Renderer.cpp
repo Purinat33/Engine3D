@@ -5,6 +5,7 @@
 #include "Engine/Renderer/Shader.h"
 #include "Engine/Renderer/VertexArray.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
+#include "Engine/Renderer/Texture2D.h"
 
 #include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
@@ -26,7 +27,8 @@ namespace Engine {
     void Renderer::Submit(const std::shared_ptr<Shader>& shader,
         const std::shared_ptr<VertexArray>& vao,
         const glm::mat4& model,
-        const glm::vec4& color) {
+        const glm::vec4& color,
+        const std::shared_ptr<Texture2D>& texture) {
         // Sort by ShaderID then VAO ID to reduce binds
         uint64_t key = (uint64_t(shader->GetRendererID()) << 32) | uint64_t(vao->GetRendererID());
 
@@ -36,6 +38,7 @@ namespace Engine {
         cmd.VaoPtr = vao;
         cmd.Model = model;
         cmd.Color = color;
+        cmd.Texture = texture;
         s_DrawList.push_back(std::move(cmd));
     }
 
@@ -52,6 +55,14 @@ namespace Engine {
             cmd.ShaderPtr->SetMat4("u_Model", glm::value_ptr(cmd.Model));
 
             cmd.ShaderPtr->SetFloat4("u_Color", cmd.Color.r, cmd.Color.g, cmd.Color.b, cmd.Color.a);
+
+            if (cmd.Texture) {
+                cmd.Texture->Bind(0);
+                cmd.ShaderPtr->SetInt("u_Texture", 0);
+            }
+            else {
+                cmd.ShaderPtr->SetFloat4("u_Color", cmd.Color.r, cmd.Color.g, cmd.Color.b, cmd.Color.a);
+            }
 
             cmd.VaoPtr->Bind();
             RenderCommand::DrawIndexed(cmd.VaoPtr->GetIndexBuffer()->GetCount());
