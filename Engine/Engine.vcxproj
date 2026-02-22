@@ -150,6 +150,9 @@
     <ClInclude Include="include\Engine\Core\Application.h" />
     <ClInclude Include="include\Engine\Core\Window.h" />
     <ClInclude Include="include\Engine\Engine.h" />
+    <ClInclude Include="include\Engine\Renderer\Buffer.h" />
+    <ClInclude Include="include\Engine\Renderer\Shader.h" />
+    <ClInclude Include="include\Engine\Renderer\VertexArray.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="src\Platform\Windows\WindowsWindow.h" />
   </ItemGroup>
@@ -166,6 +169,9 @@
     </ClCompile>
     <ClCompile Include="src\Core\Application.cpp" />
     <ClCompile Include="src\Platform\Windows\WindowsWindow.cpp" />
+    <ClCompile Include="src\Renderer\Buffer.cpp" />
+    <ClCompile Include="src\Renderer\Shader.cpp" />
+    <ClCompile Include="src\Renderer\VertexArray.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />
