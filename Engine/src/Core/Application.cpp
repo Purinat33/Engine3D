@@ -13,9 +13,14 @@
 #include "Engine/Renderer/Model.h"
 #include "Engine/Renderer/CameraController.h"
 
+#include "Engine/Renderer/Framebuffer.h"
+#include "Engine/Renderer/ScreenQuad.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <chrono>                         
+#include <chrono>             
+
+#include <glad/glad.h>
 
 namespace Engine {
 
@@ -28,9 +33,13 @@ namespace Engine {
         CameraController camCtrl(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
 
         ShaderLibrary shaders;
-        auto litShader = shaders.Load("Assets/Shaders/Lit.glsl"); // or .glsl
+        auto litShader = shaders.Load("Assets/Shaders/Lit.glsl");
+        auto screenShader = shaders.Load("Assets/Shaders/Screen.shader");
+
         Model model3d("Assets/Models/monkey.obj", litShader);
 
+        Framebuffer sceneFB({ 1280, 720 });
+        auto quadVAO = ScreenQuad::GetVAO();
 
         auto start = std::chrono::high_resolution_clock::now();
         auto last = start;
@@ -45,11 +54,15 @@ namespace Engine {
 
             camCtrl.OnUpdate(dt);
 
+            // Resize offscreen buffer to match window
+            sceneFB.Resize(m_Window->GetWidth(), m_Window->GetHeight());
+
+            // ---- Pass 1: render scene to offscreen framebuffer ----
+            sceneFB.Bind();
             RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
             RenderCommand::SetClearColor(0.08f, 0.10f, 0.12f, 1.0f);
             RenderCommand::Clear();
 
-            // Use camera controller camera:
             Renderer::BeginScene(camCtrl.GetCamera());
 
             litShader->Bind();
@@ -64,6 +77,20 @@ namespace Engine {
             }
 
             Renderer::EndScene();
+
+            // ---- Pass 2: present to screen ----
+            Framebuffer::BindDefault();
+            RenderCommand::SetViewport(0, 0, m_Window->GetWidth(), m_Window->GetHeight());
+            RenderCommand::SetClearColor(0.f, 0.f, 0.f, 1.f);
+            RenderCommand::Clear();
+
+            screenShader->Bind();
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, sceneFB.GetColorAttachmentRendererID());
+            screenShader->SetInt("u_Scene", 0);
+
+            quadVAO->Bind();
+            RenderCommand::DrawIndexed(quadVAO->GetIndexBuffer()->GetCount());
             m_Window->OnUpdate();
         }
         
