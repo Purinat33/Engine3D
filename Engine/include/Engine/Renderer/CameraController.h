@@ -6,7 +6,11 @@ namespace Engine {
 
     class CameraController {
     public:
+        
+        
+
         CameraController(float fovRadians, float aspect, float nearClip, float farClip);
+
 
         void OnUpdate(float dt);
 
@@ -15,9 +19,11 @@ namespace Engine {
 
         void SetMoveSpeed(float s) { m_MoveSpeed = s; }
         void SetMouseSensitivity(float s) { m_MouseSensitivity = s; }
-
+        void SetActive(bool active) { m_Active = active; }
+        bool IsActive() const { return m_Active; }
     private:
         PerspectiveCamera m_Camera;
+        bool m_Active = true;
 
         float m_MoveSpeed = 4.5f;
         float m_MouseSensitivity = 0.0020f;

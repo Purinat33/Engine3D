@@ -24,6 +24,12 @@ namespace Engine {
     }
 
     void CameraController::OnUpdate(float dt) {
+        if (!m_Active) {
+            // Reset first-mouse so you don't jump when re-activating
+            m_FirstMouse = true;
+            return;
+        }
+
         // Mouse look
         float mx, my;
         Input::GetMousePosition(mx, my);

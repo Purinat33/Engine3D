@@ -24,6 +24,7 @@ int main() {
 
     float mouseX = 0.f, mouseY = 0.f;
     uint32_t selectedID = 0;
+    bool cameraControl = false;
 
     // Create window (GL context loads in WindowsWindow)
     auto window = Window::Create({ "Engine3D Editor", 1600, 900 });
@@ -85,6 +86,28 @@ int main() {
             return false;
             });
 
+        d.Dispatch<MouseButtonPressedEvent>([&](MouseButtonPressedEvent& mb) {
+            if (mb.GetMouseButton() == 1) { // right mouse
+                cameraControl = true;
+                return true;
+            }
+            if (mb.GetMouseButton() == 0) { // left mouse -> picking
+                uint32_t id = pipeline.ReadPickingID((uint32_t)mouseX, (uint32_t)mouseY);
+                selectedID = id;
+                std::cout << "[Pick] ID = " << selectedID << "\n";
+                return true;
+            }
+            return false;
+            });
+
+        d.Dispatch<MouseButtonReleasedEvent>([&](MouseButtonReleasedEvent& mb) {
+            if (mb.GetMouseButton() == 1) { // right mouse
+                cameraControl = false;
+                return true;
+            }
+            return false;
+            });
+
         d.Dispatch<WindowCloseEvent>([&](WindowCloseEvent&) {
             running = false;
             return true;
@@ -139,6 +162,7 @@ int main() {
         last = now;
 
         // Update editor camera (WASD + mouse)
+        editorCam.SetActive(cameraControl);
         editorCam.OnUpdate(dt);
 
         // Render
