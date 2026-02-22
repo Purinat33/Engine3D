@@ -54,6 +54,9 @@ namespace Engine {
             shader->SetMat4("u_ViewProjection", glm::value_ptr(s_ViewProjection));
             shader->SetMat4("u_Model", glm::value_ptr(cmd.Model));
 
+            // Default: no texture
+            int useTexture0 = 0;
+
             // Bind textures (slot -> u_Texture{slot})
             for (const auto& kv : mat->GetTextures()) {
                 uint32_t slot = kv.first;
@@ -62,11 +65,19 @@ namespace Engine {
 
                 tex->Bind(slot);
                 shader->SetInt("u_Texture" + std::to_string(slot), (int)slot);
+
+                if (slot == 0) useTexture0 = 1;
             }
+
+            // Tell shader whether to sample texture0
+            shader->SetInt("u_UseTexture", useTexture0);
 
             if (mat->HasColor()) {
                 const auto& c = mat->GetColor();
                 shader->SetFloat4("u_Color", c.r, c.g, c.b, c.a);
+            }
+            else {
+                shader->SetFloat4("u_Color", 1.f, 1.f, 1.f, 1.f);
             }
 
             cmd.VaoPtr->Bind();
