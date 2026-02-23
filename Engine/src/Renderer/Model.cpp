@@ -132,11 +132,16 @@ namespace Engine {
         // ---- External texture (gltf+pngs, obj+mtl, etc.) ----
         std::string fullPath = JoinPathFS(m_Directory, texName);
 
-        auto tex = std::shared_ptr<Texture2D>(new Texture2D(fullPath));
-        m_TextureCache[cacheKey] = tex;
-
-        std::cout << "[Model] Loaded texture: " << fullPath << "\n";
-        return tex;
+        try {
+            auto tex = std::make_shared<Texture2D>(fullPath);
+            m_TextureCache[cacheKey] = tex;
+            std::cout << "[Model] Loaded texture: " << fullPath << "\n";
+            return tex;
+        }
+        catch (const std::exception& e) {
+            std::cout << "[Model] Texture load failed: " << fullPath << " (" << e.what() << ")\n";
+            return nullptr;
+        }
     }
 
     Model::SubMesh Model::ProcessMesh(aiMesh* mesh, const aiScene* scene) {

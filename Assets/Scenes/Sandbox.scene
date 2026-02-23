@@ -1,20 +1,12 @@
 {
   "Entities": [
     {
-      "DirectionalLight": {
-        "Color": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "Direction": [
-          0.4000000059604645,
-          0.800000011920929,
-          -0.30000001192092896
-        ]
+      "ID": 17308376137311855236,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/test_glb.glb",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
       },
-      "ID": 11220316508858700379,
-      "Tag": "SunLight",
+      "Tag": "test_glb",
       "Transform": {
         "Rotation": [
           0.0,
@@ -28,6 +20,56 @@
         ],
         "Translation": [
           0.0,
+          1.6764756441116333,
+          0.0
+        ]
+      }
+    },
+    {
+      "ID": 270982728446243797,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/Wall/wall.gltf",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      },
+      "Tag": "wall",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          4.6479997634887695,
+          1.6159999370574951,
+          0.8100000023841858
+        ],
+        "Translation": [
+          -0.18172870576381683,
+          1.747279405593872,
+          -2.4762141704559326
+        ]
+      }
+    },
+    {
+      "ID": 1280582943552269028,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/monkey.obj",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      },
+      "Tag": "Monkey Copy",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Translation": [
+          -3.415921926498413,
           0.0,
           0.0
         ]
@@ -59,12 +101,20 @@
       }
     },
     {
-      "ID": 1280582943552269028,
-      "MeshRenderer": {
-        "ModelPath": "Assets/Models/monkey.obj",
-        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      "DirectionalLight": {
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Direction": [
+          0.4000000059604645,
+          0.800000011920929,
+          -0.30000001192092896
+        ]
       },
-      "Tag": "Monkey Copy",
+      "ID": 11220316508858700379,
+      "Tag": "SunLight",
       "Transform": {
         "Rotation": [
           0.0,
@@ -77,34 +127,9 @@
           1.0
         ],
         "Translation": [
-          -3.415921926498413,
-          0.0,
-          0.0
-        ]
-      }
-    },
-    {
-      "ID": 270982728446243797,
-      "MeshRenderer": {
-        "ModelPath": "Assets/Models/Wall/wall.gltf",
-        "ShaderPath": "Assets/Shaders/Lit.glsl"
-      },
-      "Tag": "wall",
-      "Transform": {
-        "Rotation": [
           0.0,
           0.0,
           0.0
-        ],
-        "Scale": [
-          4.6479997634887695,
-          1.6159999370574951,
-          0.8100000023841858
-        ],
-        "Translation": [
-          -0.18172870576381683,
-          1.747279405593872,
-          -2.4762141704559326
         ]
       }
     }

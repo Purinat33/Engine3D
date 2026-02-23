@@ -1,6 +1,31 @@
 {
   "Entities": [
     {
+      "ID": 12191261093871392135,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/Wall/wall.gltf",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      },
+      "Tag": "wall",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Translation": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
       "DirectionalLight": {
         "Color": [
           1.0,
