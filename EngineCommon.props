@@ -30,6 +30,12 @@
 			<WarningLevel>Level4</WarningLevel>
 			<TreatWarningAsError>false</TreatWarningAsError>
 		</ClCompile>
+		<Link>
+			<AdditionalDependencies>
+				Comdlg32.lib;
+				%(AdditionalDependencies)
+			</AdditionalDependencies>
+		</Link>
 	</ItemDefinitionGroup>
 
 	<ItemGroup />
