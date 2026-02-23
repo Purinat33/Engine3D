@@ -35,6 +35,15 @@ using namespace Engine;
 enum class GizmoMode { None, Translate, Rotate, Scale };
 enum class AxisConstraint { None, X, Y, Z };
 
+static const char* AxisName(AxisConstraint a) {
+    switch (a) {
+    case AxisConstraint::X: return "X";
+    case AxisConstraint::Y: return "Y";
+    case AxisConstraint::Z: return "Z";
+    default: return "None";
+    }
+}
+
 static glm::vec3 AxisToVec(AxisConstraint a) {
     switch (a) {
     case AxisConstraint::X: return { 1,0,0 };
@@ -190,6 +199,131 @@ static void AddCircle(std::vector<GizmoVertex>& out, const glm::vec3& center,
     }
 }
 
+struct GizmoMesh {
+    GLuint VAO = 0, VBO = 0, EBO = 0;
+    GLsizei Count = 0;
+    GLenum Mode = GL_TRIANGLES;
+    bool Indexed = true;
+};
+
+static GizmoMesh MakeIndexedMesh(const std::vector<glm::vec3>& verts,
+    const std::vector<uint32_t>& idx,
+    GLenum mode)
+{
+    GizmoMesh m;
+    m.Mode = mode;
+    m.Indexed = true;
+    m.Count = (GLsizei)idx.size();
+
+    glGenVertexArrays(1, &m.VAO);
+    glGenBuffers(1, &m.VBO);
+    glGenBuffers(1, &m.EBO);
+
+    glBindVertexArray(m.VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m.VBO);
+    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(glm::vec3), verts.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(uint32_t), idx.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+
+    glBindVertexArray(0);
+    return m;
+}
+
+static GizmoMesh MakeNonIndexedMesh(const std::vector<glm::vec3>& verts, GLenum mode)
+{
+    GizmoMesh m;
+    m.Mode = mode;
+    m.Indexed = false;
+    m.Count = (GLsizei)verts.size();
+
+    glGenVertexArrays(1, &m.VAO);
+    glGenBuffers(1, &m.VBO);
+
+    glBindVertexArray(m.VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m.VBO);
+    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(glm::vec3), verts.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+
+    glBindVertexArray(0);
+    return m;
+}
+
+static void DrawMesh(const GizmoMesh& m) {
+    glBindVertexArray(m.VAO);
+    if (m.Indexed) glDrawElements(m.Mode, m.Count, GL_UNSIGNED_INT, nullptr);
+    else glDrawArrays(m.Mode, 0, m.Count);
+    glBindVertexArray(0);
+}
+
+// Geometry builders
+static GizmoMesh BuildUnitLineX() {
+    std::vector<glm::vec3> v = { {0,0,0}, {1,0,0} };
+    std::vector<uint32_t> i = { 0, 1 };
+    return MakeIndexedMesh(v, i, GL_LINES);
+}
+
+static GizmoMesh BuildConeZ(int segments = 16) {
+    // Tip at (0,0,1), base circle at z=0.75 radius=0.06
+    std::vector<glm::vec3> v;
+    std::vector<uint32_t> idx;
+
+    const float baseZ = 0.75f;
+    const float r = 0.06f;
+
+    uint32_t tip = 0;
+    v.push_back({ 0,0,1 });
+
+    // base ring
+    for (int s = 0; s < segments; s++) {
+        float a = (float)s / (float)segments * 6.2831853f;
+        v.push_back({ std::cos(a) * r, std::sin(a) * r, baseZ });
+    }
+
+    // side triangles
+    for (int s = 0; s < segments; s++) {
+        uint32_t a = 1 + s;
+        uint32_t b = 1 + ((s + 1) % segments);
+        idx.push_back(tip);
+        idx.push_back(a);
+        idx.push_back(b);
+    }
+
+    return MakeIndexedMesh(v, idx, GL_TRIANGLES);
+}
+
+static GizmoMesh BuildCube(float half = 0.06f) {
+    // Cube centered at origin
+    std::vector<glm::vec3> v = {
+        {-half,-half,-half}, { half,-half,-half}, { half, half,-half}, {-half, half,-half},
+        {-half,-half, half}, { half,-half, half}, { half, half, half}, {-half, half, half},
+    };
+    std::vector<uint32_t> i = {
+        0,1,2, 2,3,0, // back
+        4,5,6, 6,7,4, // front
+        0,4,7, 7,3,0, // left
+        1,5,6, 6,2,1, // right
+        3,2,6, 6,7,3, // top
+        0,1,5, 5,4,0  // bottom
+    };
+    return MakeIndexedMesh(v, i, GL_TRIANGLES);
+}
+
+static GizmoMesh BuildCircleXZ(int segments = 64) {
+    std::vector<glm::vec3> v;
+    v.reserve(segments);
+    for (int s = 0; s < segments; s++) {
+        float a = (float)s / (float)segments * 6.2831853f;
+        v.push_back({ std::cos(a), 0.0f, std::sin(a) });
+    }
+    return MakeNonIndexedMesh(v, GL_LINE_LOOP);
+}
+
 // ---------------- Main ----------------
 
 int main() {
@@ -257,6 +391,13 @@ int main() {
     glm::vec3 dragStartTranslation{ 0.f };
     glm::vec3 dragStartRotation{ 0.f };
     glm::vec3 dragStartScale{ 1.f };
+
+    auto gizmoShader = std::make_shared<Shader>("Assets/Shaders/Gizmo.shader");
+
+    GizmoMesh lineX = BuildUnitLineX();
+    GizmoMesh coneZ = BuildConeZ();
+    GizmoMesh cube = BuildCube();
+    GizmoMesh ring = BuildCircleXZ();
 
     // Viewport info
     ImVec2 viewportPos{ 0,0 };
@@ -392,18 +533,19 @@ int main() {
 
         // --- Viewport ---
         ImGui::Begin("Viewport");
-        viewportPos = ImGui::GetCursorScreenPos();
-        viewportSize = ImGui::GetContentRegionAvail();
-        if (viewportSize.x < 1) viewportSize.x = 1;
-        if (viewportSize.y < 1) viewportSize.y = 1;
 
-        uint32_t vw = (uint32_t)viewportSize.x;
-        uint32_t vh = (uint32_t)viewportSize.y;
+        // 1) Define the viewport *rect* once (this is stable)
+        ImVec2 vpMin = ImGui::GetCursorScreenPos();
+        ImVec2 vpSize = ImGui::GetContentRegionAvail();
+        if (vpSize.x < 1) vpSize.x = 1;
+        if (vpSize.y < 1) vpSize.y = 1;
+        ImVec2 vpMax = ImVec2(vpMin.x + vpSize.x, vpMin.y + vpSize.y);
 
-        // Focus state for hotkeys
-        viewportFocused = ImGui::IsWindowFocused();
+        uint32_t vw = (uint32_t)vpSize.x;
+        uint32_t vh = (uint32_t)vpSize.y;
 
-        // Hotkeys (only when viewport focused and not typing in widgets)
+        // 2) Hotkeys only when viewport focused
+        bool viewportFocused = ImGui::IsWindowFocused();
         if (viewportFocused && !io.WantCaptureKeyboard) {
             if (ImGui::IsKeyPressed(ImGuiKey_G) && selectedEntity) gizmo = GizmoMode::Translate;
             if (ImGui::IsKeyPressed(ImGuiKey_R) && selectedEntity) gizmo = GizmoMode::Rotate;
@@ -415,18 +557,20 @@ int main() {
             if (ImGui::IsKeyPressed(ImGuiKey_Z)) axis = (axis == AxisConstraint::Z) ? AxisConstraint::None : AxisConstraint::Z;
         }
 
-        // Camera control: RMB held anywhere in viewport window
-        bool cameraControl = ImGui::IsWindowHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Right);
+        // 3) Camera control based on viewport RECT (not imageHovered)
+        bool viewportRectHovered = ImGui::IsMouseHoveringRect(vpMin, vpMax, false);
+        bool cameraControl = viewportRectHovered && ImGui::IsMouseDown(ImGuiMouseButton_Right);
+
         editorCam.SetActive(cameraControl);
         editorCam.OnUpdate(dt);
-        glfwSetInputMode(native, GLFW_CURSOR, cameraControl ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        glfwSetInputMode(native, GLFW_CURSOR,
+            cameraControl ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 
-        // --- Picking pass ---
+        // 4) Render passes (use updated camera)
         pipeline.BeginPickingPass(vw, vh, editorCam.GetCamera());
         scene.OnRenderPicking(editorCam.GetCamera(), pipeline.GetIDMaterial());
         pipeline.EndPickingPass();
 
-        // --- Scene pass ---
         pipeline.BeginScenePass(vw, vh, editorCam.GetCamera());
 
         // Grid
@@ -442,74 +586,38 @@ int main() {
 
         pipeline.EndScenePass();
 
-        // --- Draw gizmo visuals into the scene framebuffer (scene FB still bound here) ---
-        if (selectedEntity && gizmo != GizmoMode::None) {
-            std::vector<GizmoVertex> verts;
-            verts.reserve(4096);
+        // Draw gizmos into scene FB here if you want (your existing code is fine)
 
-            glm::vec3 p = selectedEntity.GetComponent<TransformComponent>().Translation;
-
-            float dist = glm::length(p - editorCam.GetPosition());
-            if (dist < 1.0f) dist = 1.0f;
-
-            // scale gizmo to keep it readable
-            float g = std::max(0.8f, dist * 0.15f);
-
-            glm::vec3 colX = (axis == AxisConstraint::X) ? glm::vec3(1, 1, 0) : glm::vec3(1, 0.2f, 0.2f);
-            glm::vec3 colY = (axis == AxisConstraint::Y) ? glm::vec3(1, 1, 0) : glm::vec3(0.2f, 1, 0.2f);
-            glm::vec3 colZ = (axis == AxisConstraint::Z) ? glm::vec3(1, 1, 0) : glm::vec3(0.2f, 0.6f, 1);
-
-            if (gizmo == GizmoMode::Translate) {
-                AddArrow(verts, p, { 1,0,0 }, colX, g, g * 0.18f, g * 0.07f);
-                AddArrow(verts, p, { 0,1,0 }, colY, g, g * 0.18f, g * 0.07f);
-                AddArrow(verts, p, { 0,0,1 }, colZ, g, g * 0.18f, g * 0.07f);
-            }
-            else if (gizmo == GizmoMode::Rotate) {
-                AddCircle(verts, p, { 1,0,0 }, colX, g * 0.85f, 64);
-                AddCircle(verts, p, { 0,1,0 }, colY, g * 0.85f, 64);
-                AddCircle(verts, p, { 0,0,1 }, colZ, g * 0.85f, 64);
-            }
-            else if (gizmo == GizmoMode::Scale) {
-                AddLine(verts, p, p + glm::vec3(g, 0, 0), colX);
-                AddLine(verts, p, p + glm::vec3(0, g, 0), colY);
-                AddLine(verts, p, p + glm::vec3(0, 0, g), colZ);
-
-                AddBox(verts, p + glm::vec3(g, 0, 0), { 0,1,0 }, { 0,0,1 }, colX, g * 0.05f);
-                AddBox(verts, p + glm::vec3(0, g, 0), { 1,0,0 }, { 0,0,1 }, colY, g * 0.05f);
-                AddBox(verts, p + glm::vec3(0, 0, g), { 1,0,0 }, { 0,1,0 }, colZ, g * 0.05f);
-            }
-
-            // draw on top
-            glDisable(GL_DEPTH_TEST);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-            gizmoRenderer.Draw(editorCam.GetCamera(), verts, 1.0f);
-
-            glEnable(GL_DEPTH_TEST);
-        }
-
-        // Compose scene + selection outline
         pipeline.Compose();
 
-        // Show composite in ImGui
+        // 5) Show composite texture
         ImTextureID tex = (ImTextureID)(intptr_t)pipeline.GetCompositeTexture();
-        ImGui::Image(tex, viewportSize, ImVec2(0, 1), ImVec2(1, 0));
-        bool imageHovered = ImGui::IsItemHovered();
+        ImGui::Image(tex, vpSize, ImVec2(0, 1), ImVec2(1, 0));
 
-        // Mouse position relative to image
+        // 6) Now (and ONLY now) compute image hover + mouse coords relative to image
+        bool imageHovered = ImGui::IsItemHovered();
+        ImVec2 imgMin = ImGui::GetItemRectMin();
+        ImVec2 imgMax = ImGui::GetItemRectMax();
+        ImVec2 imgSize = ImVec2(imgMax.x - imgMin.x, imgMax.y - imgMin.y);
+
         ImVec2 mp = ImGui::GetMousePos();
-        float mx = mp.x - viewportPos.x;
-        float my = mp.y - viewportPos.y;
+        float mx = mp.x - imgMin.x;
+        float my = mp.y - imgMin.y;
+
+        // clamp
+        if (mx < 0) mx = 0; if (my < 0) my = 0;
+        if (mx > imgSize.x - 1) mx = imgSize.x - 1;
+        if (my > imgSize.y - 1) my = imgSize.y - 1;
 
         bool ctrlDown = io.KeyCtrl;
 
-        // Click selection / start drag
-        if (imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !io.WantCaptureMouse) {
+        // 7) Click selection / start drag (don’t start if cameraControl is active)
+        if (!cameraControl && imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             if (gizmo != GizmoMode::None && selectedEntity) {
                 dragging = true;
                 dragStartX = mx;
                 dragStartY = my;
+
                 auto& tc = selectedEntity.GetComponent<TransformComponent>();
                 dragStartTranslation = tc.Translation;
                 dragStartRotation = tc.Rotation;
@@ -524,12 +632,11 @@ int main() {
             }
         }
 
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
             dragging = false;
-        }
 
         // Dragging applies transform with axis constraints
-        if (dragging && gizmo != GizmoMode::None && selectedEntity) {
+        if (!cameraControl && dragging && gizmo != GizmoMode::None && selectedEntity) {
             float dx = mx - dragStartX;
             float dy = my - dragStartY;
 
@@ -543,16 +650,23 @@ int main() {
             if (dist < 1.0f) dist = 1.0f;
 
             if (gizmo == GizmoMode::Translate) {
+                glm::vec3 camRight = editorCam.GetRight();
+                glm::vec3 camFwd = editorCam.GetForward();
+                glm::vec3 camUp = glm::normalize(glm::cross(camRight, camFwd));
+
+                float dist = glm::length(dragStartTranslation - editorCam.GetPosition());
+                if (dist < 1.0f) dist = 1.0f;
+                float scale = 0.0020f * dist;
+
                 glm::vec3 out = dragStartTranslation;
 
                 if (axis == AxisConstraint::None) {
-                    // camera-relative XZ
+                    // existing XZ plane feel (camera-relative)
                     glm::vec3 right = camRight; right.y = 0.f;
                     glm::vec3 fwd = camFwd;   fwd.y = 0.f;
-                    if (glm::length(right) > 0.0001f) right = glm::normalize(right); else right = { 1,0,0 };
-                    if (glm::length(fwd) > 0.0001f) fwd = glm::normalize(fwd);   else fwd = { 0,0,-1 };
+                    float rl = glm::length(right); if (rl > 0.0001f) right /= rl;
+                    float fl = glm::length(fwd);   if (fl > 0.0001f) fwd /= fl;
 
-                    float scale = kTranslateSense * dist;
                     glm::vec3 delta = (right * dx + fwd * (-dy)) * scale;
                     out = dragStartTranslation + delta;
 
@@ -563,44 +677,52 @@ int main() {
                     }
                 }
                 else {
-                    glm::vec3 a = AxisToVec(axis);
-                    float scale = kTranslateSense * dist;
+                    glm::vec3 A = (axis == AxisConstraint::X) ? glm::vec3(1, 0, 0)
+                        : (axis == AxisConstraint::Y) ? glm::vec3(0, 1, 0)
+                        : glm::vec3(0, 0, 1);
 
-                    float amount = (dx * glm::dot(a, camRight) + (-dy) * glm::dot(a, camUp)) * scale;
-                    out = dragStartTranslation + a * amount;
+                    // project mouse motion onto axis using camera basis
+                    glm::vec3 dragVec = camRight * dx + camUp * (-dy);
+                    float amt = glm::dot(dragVec, A) * scale;
+                    out = dragStartTranslation + A * amt;
 
                     if (ctrlDown) {
                         const float step = 0.5f;
-                        if (axis == AxisConstraint::X) out.x = SnapFloat(out.x, step);
-                        if (axis == AxisConstraint::Y) out.y = SnapFloat(out.y, step);
-                        if (axis == AxisConstraint::Z) out.z = SnapFloat(out.z, step);
+                        out.x = SnapFloat(out.x, step);
+                        out.y = SnapFloat(out.y, step);
+                        out.z = SnapFloat(out.z, step);
                     }
                 }
 
                 tc.Translation = out;
             }
             else if (gizmo == GizmoMode::Rotate) {
-                glm::vec3 out = dragStartRotation;
+                float speed = 0.01f;
+                float delta = dx * speed;
 
-                AxisConstraint useAxis = (axis == AxisConstraint::None) ? AxisConstraint::Y : axis;
-                float angle = dx * kRotateSense;
+                auto out = dragStartRotation;
+
+                AxisConstraint ax = (axis == AxisConstraint::None) ? AxisConstraint::Y : axis;
+
+                if (ax == AxisConstraint::X) out.x = dragStartRotation.x + delta;
+                if (ax == AxisConstraint::Y) out.y = dragStartRotation.y + delta;
+                if (ax == AxisConstraint::Z) out.z = dragStartRotation.z + delta;
 
                 if (ctrlDown) {
                     float step = 3.1415926f / 12.0f; // 15 deg
-                    angle = SnapFloat(angle, step);
+                    out.x = SnapFloat(out.x, step);
+                    out.y = SnapFloat(out.y, step);
+                    out.z = SnapFloat(out.z, step);
                 }
-
-                if (useAxis == AxisConstraint::X) out.x = dragStartRotation.x + angle;
-                if (useAxis == AxisConstraint::Y) out.y = dragStartRotation.y + angle;
-                if (useAxis == AxisConstraint::Z) out.z = dragStartRotation.z + angle;
 
                 tc.Rotation = out;
             }
             else if (gizmo == GizmoMode::Scale) {
-                glm::vec3 out = dragStartScale;
-
-                float s = 1.0f + (-dy) * kScaleSense;
+                float speed = 0.01f;
+                float s = 1.0f + (-dy) * speed;
                 if (s < 0.05f) s = 0.05f;
+
+                glm::vec3 out = dragStartScale;
 
                 if (axis == AxisConstraint::None) {
                     out = dragStartScale * s;
@@ -613,16 +735,9 @@ int main() {
 
                 if (ctrlDown) {
                     const float step = 0.1f;
-                    if (axis == AxisConstraint::None) {
-                        out.x = SnapFloat(out.x, step);
-                        out.y = SnapFloat(out.y, step);
-                        out.z = SnapFloat(out.z, step);
-                    }
-                    else {
-                        if (axis == AxisConstraint::X) out.x = SnapFloat(out.x, step);
-                        if (axis == AxisConstraint::Y) out.y = SnapFloat(out.y, step);
-                        if (axis == AxisConstraint::Z) out.z = SnapFloat(out.z, step);
-                    }
+                    out.x = SnapFloat(out.x, step);
+                    out.y = SnapFloat(out.y, step);
+                    out.z = SnapFloat(out.z, step);
                 }
 
                 tc.Scale = out;

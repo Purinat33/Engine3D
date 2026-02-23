@@ -36,6 +36,8 @@ namespace Engine {
         void SetSelectedID(uint32_t id) { m_SelectedID = id; }
         uint32_t GetSelectedID() const { return m_SelectedID; }
 
+        void BeginOverlayPass(); // binds scene framebuffer, no clear
+        void EndOverlayPass();   // currently no-op
     private:
         void EnsureSceneResources(uint32_t width, uint32_t height);
         void EnsurePickingResources(uint32_t width, uint32_t height);

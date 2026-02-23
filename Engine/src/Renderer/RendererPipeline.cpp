@@ -161,4 +161,14 @@ namespace Engine {
         RenderCommand::DrawIndexed(m_ScreenQuadVAO->GetIndexBuffer()->GetCount());
     }
 
+    void RendererPipeline::BeginOverlayPass() {
+        if (!m_SceneFB) return;
+        m_SceneFB->Bind();
+        RenderCommand::SetViewport(0, 0, m_Width, m_Height);
+    }
+
+    void RendererPipeline::EndOverlayPass() {
+        // no-op; scene FB stays bound until Compose() binds its own FB anyway
+    }
+
 } // namespace Engine

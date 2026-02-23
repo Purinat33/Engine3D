@@ -144,6 +144,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\Assets\Shaders\Gizmo.shader" />
     <None Include="..\Assets\Shaders\GizmoLine.shader" />
     <None Include="..\Assets\Shaders\Grid.shader" />
     <None Include="..\Assets\Shaders\ID.shader" />

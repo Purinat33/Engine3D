@@ -25,5 +25,8 @@
     <None Include="..\Assets\Shaders\GizmoLine.shader">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="..\Assets\Shaders\Gizmo.shader">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
