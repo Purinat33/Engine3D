@@ -9,15 +9,17 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+#include <filesystem>
 #include <iostream>
+#include <vector>
+#include <unordered_map>
 
 namespace Engine {
 
-    static std::string JoinPath(const std::string& dir, const std::string& file) {
+    static std::string JoinPathFS(const std::string& dir, const std::string& file) {
         if (dir.empty()) return file;
-        char last = dir.back();
-        if (last == '/' || last == '\\') return dir + file;
-        return dir + "\\" + file;
+        std::filesystem::path p = std::filesystem::path(dir) / std::filesystem::path(file);
+        return p.lexically_normal().string();
     }
 
     Model::Model(const std::string& path, const std::shared_ptr<Shader>& defaultShader)
@@ -28,6 +30,7 @@ namespace Engine {
     void Model::LoadModel(const std::string& path) {
         Assimp::Importer importer;
 
+        // You can optionally add aiProcess_FlipUVs if textures appear upside-down for some assets.
         const aiScene* scene = importer.ReadFile(
             path,
             aiProcess_Triangulate |
@@ -43,8 +46,10 @@ namespace Engine {
 
         auto slash = path.find_last_of("/\\");
         m_Directory = (slash == std::string::npos) ? "" : path.substr(0, slash);
+        m_SourcePath = path; // NEW: keep for cache keys
 
         m_SubMeshes.clear();
+        m_TextureCache.clear();
         ProcessNode(scene->mRootNode, scene);
 
         std::cout << "[Model] Loaded: " << path << " submeshes=" << m_SubMeshes.size() << "\n";
@@ -60,8 +65,8 @@ namespace Engine {
             ProcessNode(node->mChildren[i], scene);
     }
 
+    // Loads baseColor/diffuse only for now (slot 0).
     std::shared_ptr<Texture2D> Model::LoadTextureFromMaterial(aiMaterial* mat, const aiScene* scene) {
-        // Prefer BaseColor (glTF) if available, else Diffuse (OBJ/FBX/etc.)
         auto tryType = [&](aiTextureType type) -> std::string {
             if (!mat || mat->GetTextureCount(type) == 0) return {};
             aiString str;
@@ -69,28 +74,66 @@ namespace Engine {
             return str.C_Str();
             };
 
-        std::string texRel = tryType(aiTextureType_BASE_COLOR);
-        if (texRel.empty())
-            texRel = tryType(aiTextureType_DIFFUSE);
+        // glTF
+        std::string texName = tryType(aiTextureType_BASE_COLOR);
+        // other formats
+        if (texName.empty())
+            texName = tryType(aiTextureType_DIFFUSE);
 
-        if (texRel.empty())
+        if (texName.empty())
             return nullptr;
 
-        // Embedded textures show up like "*0" — we skip those for now
-        if (!texRel.empty() && texRel[0] == '*') {
-            std::cout << "[Model] Embedded texture detected (" << texRel << "), not supported yet.\n";
-            return nullptr;
-        }
-
-        std::string fullPath = JoinPath(m_Directory, texRel);
-
-        // Cache
-        auto it = m_TextureCache.find(fullPath);
-        if (it != m_TextureCache.end())
+        // Cache key
+        std::string cacheKey = m_SourcePath + "|" + texName;
+        if (auto it = m_TextureCache.find(cacheKey); it != m_TextureCache.end())
             return it->second;
 
-        auto tex = std::make_shared<Texture2D>(fullPath);
-        m_TextureCache[fullPath] = tex;
+        // ---- Embedded texture (GLB often uses this) ----
+        if (scene) {
+            if (const aiTexture* embedded = scene->GetEmbeddedTexture(texName.c_str())) {
+                // Compressed image data (PNG/JPG) if mHeight == 0
+                if (embedded->mHeight == 0) {
+                    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(embedded->pcData);
+                    size_t sizeBytes = (size_t)embedded->mWidth;
+
+                    Texture2D* raw = Texture2D::CreateFromMemory(texName, bytes, sizeBytes);
+                    auto tex = std::shared_ptr<Texture2D>(raw);
+
+                    m_TextureCache[cacheKey] = tex;
+                    std::cout << "[Model] Loaded embedded texture: " << texName << "\n";
+                    return tex;
+                }
+
+                // Uncompressed (rare): aiTexel array (RGBA)
+                {
+                    int w = (int)embedded->mWidth;
+                    int h = (int)embedded->mHeight;
+
+                    std::vector<uint8_t> rgba;
+                    rgba.resize((size_t)w * (size_t)h * 4);
+
+                    for (int i = 0; i < w * h; i++) {
+                        rgba[i * 4 + 0] = embedded->pcData[i].r;
+                        rgba[i * 4 + 1] = embedded->pcData[i].g;
+                        rgba[i * 4 + 2] = embedded->pcData[i].b;
+                        rgba[i * 4 + 3] = embedded->pcData[i].a;
+                    }
+
+                    Texture2D* raw = Texture2D::CreateFromRGBA8(texName, rgba.data(), w, h);
+                    auto tex = std::shared_ptr<Texture2D>(raw);
+
+                    m_TextureCache[cacheKey] = tex;
+                    std::cout << "[Model] Loaded embedded RGBA texture: " << texName << "\n";
+                    return tex;
+                }
+            }
+        }
+
+        // ---- External texture (gltf+pngs, obj+mtl, etc.) ----
+        std::string fullPath = JoinPathFS(m_Directory, texName);
+
+        auto tex = std::shared_ptr<Texture2D>(new Texture2D(fullPath));
+        m_TextureCache[cacheKey] = tex;
 
         std::cout << "[Model] Loaded texture: " << fullPath << "\n";
         return tex;
@@ -127,7 +170,6 @@ namespace Engine {
 
         auto meshObj = std::make_shared<Mesh>(vertices, indices);
 
-        // Build a material for this mesh
         auto matObj = std::make_shared<Material>(m_DefaultShader);
         matObj->SetColor({ 1, 1, 1, 1 });
 

@@ -28,6 +28,7 @@ namespace Engine {
         };
 
         const std::vector<SubMesh>& GetSubMeshes() const { return m_SubMeshes; }
+        std::string m_SourcePath;
 
     private:
         void LoadModel(const std::string& path);

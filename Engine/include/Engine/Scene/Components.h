@@ -1,6 +1,5 @@
 #pragma once
 #include <string>
-#include <memory>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -39,8 +38,9 @@ namespace Engine {
 
     struct MeshRendererComponent {
         AssetHandle Model = InvalidAssetHandle;
+
         MeshRendererComponent() = default;
-        MeshRendererComponent(AssetHandle modelHandle) : Model(modelHandle) {}
+        explicit MeshRendererComponent(AssetHandle modelHandle) : Model(modelHandle) {}
     };
 
     struct DirectionalLightComponent {

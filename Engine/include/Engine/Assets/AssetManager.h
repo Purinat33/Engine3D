@@ -1,59 +1,54 @@
 #pragma once
-#include <memory>
-#include <string>
-#include <unordered_map>
+#include "Engine/Assets/AssetRegistry.h"   // brings AssetHandle + AssetType + metadata
+#include "Engine/Assets/AssetTypes.h"
 
-#include "Engine/Assets/AssetHandle.h"
+#include <memory>
+#include <unordered_map>
+#include <string>
 
 namespace Engine {
 
     class Shader;
-    class Texture2D;
     class Model;
+    class Texture2D;
 
     class AssetManager {
     public:
         static AssetManager& Get();
 
-        // Shaders
-        AssetHandle LoadShader(const std::string& filepath);
-        std::shared_ptr<Shader> GetShader(AssetHandle handle) const;
-        const std::string& GetShaderPath(AssetHandle handle) const;
+        AssetRegistry& Registry() { return m_Registry; }
+        const AssetRegistry& Registry() const { return m_Registry; }
 
-        // Textures
-        AssetHandle LoadTexture2D(const std::string& filepath);
-        std::shared_ptr<Texture2D> GetTexture2D(AssetHandle handle) const;
+        void SaveRegistry() { m_Registry.Save(); }
+        void LoadRegistry() { m_Registry.Load(); }
 
-        // Models
+        // Import / Register + load into cache
+        AssetHandle LoadShader(const std::string& path);
+        AssetHandle LoadModel(const std::string& path, AssetHandle shaderHandle);
+        AssetHandle LoadTexture2D(const std::string& path);
+
+        // Resolve handles -> live objects
+        std::shared_ptr<Shader> GetShader(AssetHandle shaderHandle);
+        std::shared_ptr<Model> GetModel(AssetHandle modelHandle);
+        std::shared_ptr<Texture2D> GetTexture2D(AssetHandle texHandle);
+
         struct ModelInfo {
             std::string Path;
-            AssetHandle Shader = InvalidAssetHandle;
+            AssetHandle ShaderHandle = InvalidAssetHandle;
         };
 
-        AssetHandle LoadModel(const std::string& filepath, AssetHandle defaultShaderHandle);
-        std::shared_ptr<Model> GetModel(AssetHandle handle) const;
-        ModelInfo GetModelInfo(AssetHandle handle) const;
+        ModelInfo GetModelInfo(AssetHandle modelHandle) const;
+        std::string GetShaderPath(AssetHandle shaderHandle) const;
 
     private:
-        AssetManager() = default;
-
-        AssetHandle NewHandle() { return ++m_NextHandle; }
-        static std::string NormalizePath(const std::string& p);
-        static std::string MakeModelKey(const std::string& path, AssetHandle shaderHandle);
+        AssetManager();
 
     private:
-        AssetHandle m_NextHandle = InvalidAssetHandle;
+        AssetRegistry m_Registry;
 
-        std::unordered_map<std::string, AssetHandle> m_ShaderKeyToHandle;
-        std::unordered_map<AssetHandle, std::shared_ptr<Shader>> m_Shaders;
-        std::unordered_map<AssetHandle, std::string> m_ShaderPath;
-
-        std::unordered_map<std::string, AssetHandle> m_TextureKeyToHandle;
-        std::unordered_map<AssetHandle, std::shared_ptr<Texture2D>> m_Textures;
-
-        std::unordered_map<std::string, AssetHandle> m_ModelKeyToHandle;
-        std::unordered_map<AssetHandle, std::shared_ptr<Model>> m_Models;
-        std::unordered_map<AssetHandle, ModelInfo> m_ModelInfo;
+        std::unordered_map<AssetHandle, std::shared_ptr<Shader>> m_ShaderCache;
+        std::unordered_map<AssetHandle, std::shared_ptr<Model>> m_ModelCache;
+        std::unordered_map<AssetHandle, std::shared_ptr<Texture2D>> m_TextureCache;
     };
 
 } // namespace Engine

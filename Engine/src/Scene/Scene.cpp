@@ -102,7 +102,7 @@ namespace Engine {
         renderView.each([&](auto /*entity*/, TransformComponent& tc, MeshRendererComponent& mrc) {
             if (mrc.Model == InvalidAssetHandle) return;
 
-            auto model = assets.GetModel(mrc.Model);
+            auto model = AssetManager::Get().GetModel(mrc.Model);
             if (!model) return;
 
             glm::mat4 entityTransform = tc.GetTransform();

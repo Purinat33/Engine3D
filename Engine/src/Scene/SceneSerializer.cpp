@@ -67,7 +67,7 @@ namespace Engine {
                     if (mrc.Model != InvalidAssetHandle) {
                         auto info = assets.GetModelInfo(mrc.Model);
                         e["MeshRenderer"]["ModelPath"] = info.Path;
-                        e["MeshRenderer"]["ShaderPath"] = assets.GetShaderPath(info.Shader);
+                        e["MeshRenderer"]["ShaderPath"] = assets.GetShaderPath(info.ShaderHandle);
                     }
                 }
 
