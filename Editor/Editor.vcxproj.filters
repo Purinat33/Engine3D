@@ -22,5 +22,8 @@
   <ItemGroup>
     <None Include="..\Assets\Shaders\ID.shader" />
     <None Include="..\Assets\Shaders\Grid.shader" />
+    <None Include="..\Assets\Shaders\GizmoLine.shader">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
