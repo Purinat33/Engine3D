@@ -30,6 +30,14 @@ namespace Engine {
 
         static void EndScene();
 
+        // --- Lighting (simple global directional light for now) ---
+        static void SetDirectionalLight(const glm::vec3& dir, const glm::vec3& color);
+        static void ClearLights();
+
+        static bool s_HasDirLight;
+        static glm::vec3 s_DirLightDir;
+        static glm::vec3 s_DirLightColor;
+
     private:
         struct DrawCommand {
             uint64_t SortKey = 0;

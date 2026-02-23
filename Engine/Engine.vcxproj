@@ -225,6 +225,7 @@
   <ItemGroup>
     <None Include="..\Assets\Shaders\FlatColor.glsl" />
     <None Include="..\Assets\Shaders\Lit.glsl" />
+    <None Include="..\Assets\Shaders\Lit.shader" />
     <None Include="..\Assets\Shaders\Screen.glsl" />
     <None Include="..\Assets\Shaders\Screen.shader" />
     <None Include="..\Assets\Shaders\Textured.glsl" />

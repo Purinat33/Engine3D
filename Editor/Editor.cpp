@@ -874,6 +874,22 @@ int main() {
             }
 
             if (ImGui::MenuItem("Spawn Point")) {
+                // Enforce only one SpawnPoint (delete existing)
+                {
+                    auto view = scene.Registry().view<IDComponent, SpawnPointComponent>();
+                    if (view.begin() != view.end()) {
+                        // delete first existing spawn point (or all)
+                        auto enttHandle = *view.begin();
+                        UUID id = view.get<IDComponent>(enttHandle).ID;
+
+                        Entity old = scene.FindEntityByUUID(id);
+                        if (old) {
+                            auto snap = EditorUndo::CaptureEntity(old);
+                            cmdStack.Execute(scene, std::make_unique<EditorUndo::DeleteEntityCommand>(snap));
+                            if (selectedUUID == id) ClearSelection();
+                        }
+                    }
+                }
                 Entity e = scene.CreateEntity("SpawnPoint");
                 e.AddComponent<SpawnPointComponent>();
 
@@ -885,6 +901,23 @@ int main() {
             }
 
             if (ImGui::MenuItem("Scene Warp")) {
+                {
+                    auto view = scene.Registry().view<SceneWarpComponent>();
+                    int count = 0;
+                    for (auto e : view) (void)e, ++count;
+
+                    if (count >= 2) {
+                        statusText = "Only 2 SceneWarps allowed for now.";
+                        statusTimer = 2.5f;
+                    }
+                    else {
+                        Entity e = scene.CreateEntity("SceneWarp");
+                        e.AddComponent<SceneWarpComponent>();
+                        e.GetComponent<TransformComponent>().Translation =
+                            editorCam.GetPosition() + editorCam.GetForward() * 2.0f;
+                        sceneMgr.MarkDirty();
+                    }
+                }
                 Entity e = scene.CreateEntity("SceneWarp");
                 e.AddComponent<SceneWarpComponent>(); // default target set in component
                 e.GetComponent<TransformComponent>().Translation =

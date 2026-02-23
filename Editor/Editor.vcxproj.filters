@@ -28,9 +28,6 @@
     <None Include="..\Assets\Shaders\Gizmo.shader">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="..\Assets\Project\asset_registry.json">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="..\EngineContent\Shaders\Icon.shader" />
     <None Include="..\EngineContent\Shaders\Marker.shader" />
   </ItemGroup>

@@ -18,6 +18,11 @@ namespace Engine {
     glm::mat4 Renderer::s_ViewProjection{ 1.0f };
     std::vector<Renderer::DrawCommand> Renderer::s_DrawList;
 
+    bool Renderer::s_HasDirLight = false;
+    glm::vec3 Renderer::s_DirLightDir = glm::vec3(0.4f, 0.8f, -0.3f);
+    glm::vec3 Renderer::s_DirLightColor = glm::vec3(1.0f);
+
+
     void Renderer::Init() {
         RenderCommand::Init();
     }
@@ -25,6 +30,7 @@ namespace Engine {
     void Renderer::BeginScene(const PerspectiveCamera& camera) {
         s_ViewProjection = camera.GetViewProjection();
         s_DrawList.clear();
+        
     }
 
     void Renderer::EndScene() {
@@ -44,6 +50,11 @@ namespace Engine {
             shader->SetMat4("u_ViewProjection", glm::value_ptr(s_ViewProjection));
             shader->SetMat4("u_Model", glm::value_ptr(cmd.Model));
             shader->SetUInt("u_EntityID", cmd.EntityID);
+
+            shader->SetInt("u_UseLighting", s_HasDirLight ? 1 : 0);
+            shader->SetFloat3("u_LightDir", s_DirLightDir.x, s_DirLightDir.y, s_DirLightDir.z);
+            shader->SetFloat3("u_LightColor", s_DirLightColor.x, s_DirLightColor.y, s_DirLightColor.z);
+            shader->SetFloat("u_Ambient", 0.15f);
 
             // Default: no texture
             int useTexture0 = 0;
@@ -117,5 +128,17 @@ namespace Engine {
 
         s_DrawList.push_back(std::move(cmd));
     }
-    
+
+    void Renderer::SetDirectionalLight(const glm::vec3& dir, const glm::vec3& color) {
+        s_HasDirLight = true;
+        s_DirLightDir = glm::normalize(dir);
+        s_DirLightColor = color;
+    }
+
+    void Renderer::ClearLights() {
+        s_HasDirLight = false;
+        s_DirLightDir = glm::vec3(0.4f, 0.8f, -0.3f);
+        s_DirLightColor = glm::vec3(1.0f);
+    }
+
 } // namespace Engine

@@ -40,6 +40,7 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <filesystem>
 
 namespace Engine {
 
@@ -121,9 +122,6 @@ namespace Engine {
 
         auto& assets = AssetManager::Get();
 
-        /*AssetHandle litShaderH = assets.LoadShader("Assets/Shaders/Lit.glsl");
-        AssetHandle monkeyModelH = assets.LoadModel("Assets/Models/monkey.obj", litShaderH);*/
-
         Scene scene;
 
         /*auto monkey = scene.CreateEntity("Monkey");
@@ -141,8 +139,31 @@ namespace Engine {
 
         // OPTIONAL: test load immediately (into the same scene)
         serializer.Deserialize("Assets/Scenes/Sandbox.scene");
+        const std::string scenePath = "Assets/Scenes/Sandbox.scene";
+        if (!serializer.Deserialize(scenePath)) {
+            std::cerr << "[Sandbox] Failed to load scene: " << scenePath
+                << " (cwd=" << std::filesystem::current_path().string() << ")\n";
+        }
+        // --- APPLY SPAWN POINT (if any) ---
+        {
+            auto view = scene.Registry().view<TransformComponent, SpawnPointComponent>();
 
-        //monkey = scene.FindEntityByTag("Monkey");
+            entt::entity ent = entt::null;
+            for (auto e : view) { ent = e; break; }
+
+            if (ent != entt::null) {
+                auto& tc = view.get<TransformComponent>(ent);
+
+                std::cout << "[Sandbox] SpawnPoint at "
+                    << tc.Translation.x << ", " << tc.Translation.y << ", " << tc.Translation.z
+                    << " rot(p,y)=(" << tc.Rotation.x << ", " << tc.Rotation.y << ")\n";
+
+                camCtrl.SetTransform(tc.Translation, tc.Rotation.y, tc.Rotation.x);
+            }
+            else {
+                std::cout << "[Sandbox] No SpawnPoint found.\n";
+            }
+        }
 
         auto start = std::chrono::high_resolution_clock::now();
         auto last = start;
@@ -167,6 +188,27 @@ namespace Engine {
             scene.OnUpdate(dt);
 
             pipeline.BeginScenePass(m_Window->GetWidth(), m_Window->GetHeight(), camCtrl.GetCamera());
+            Renderer::ClearLights();
+            {
+                auto view = scene.Registry().view<TransformComponent, DirectionalLightComponent>();
+
+                entt::entity ent = entt::null;
+                for (auto e : view) { ent = e; break; }
+
+                if (ent != entt::null) {
+                    auto& tc = view.get<TransformComponent>(ent);
+                    auto& dl = view.get<DirectionalLightComponent>(ent);
+
+                    glm::vec3 dir{
+                        cosf(tc.Rotation.x) * sinf(tc.Rotation.y),
+                        sinf(tc.Rotation.x),
+                        -cosf(tc.Rotation.x) * cosf(tc.Rotation.y)
+                    };
+                    dl.Direction = glm::normalize(dir);
+
+                    Renderer::SetDirectionalLight(dl.Direction, dl.Color);
+                }
+            }
             scene.OnRender(camCtrl.GetCamera());          // submits only
             pipeline.EndScenePass();
             pipeline.PresentToScreen();

@@ -1,12 +1,34 @@
 {
   "Entities": [
     {
-      "ID": 12191261093871392135,
+      "ID": 18215034901052471584,
+      "SpawnPoint": true,
+      "Tag": "SpawnPoint",
+      "Transform": {
+        "Rotation": [
+          -2.2639989852905273,
+          3.0595970153808594,
+          0.0
+        ],
+        "Scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Translation": [
+          -0.9996213912963867,
+          5.7451276779174805,
+          -10.271352767944336
+        ]
+      }
+    },
+    {
+      "ID": 17258450948503458192,
       "MeshRenderer": {
-        "ModelPath": "Assets/Models/Wall/wall.gltf",
+        "ModelPath": "Assets/Models/monkey.obj",
         "ShaderPath": "Assets/Shaders/Lit.glsl"
       },
-      "Tag": "wall",
+      "Tag": "monkey",
       "Transform": {
         "Rotation": [
           0.0,
@@ -14,14 +36,14 @@
           0.0
         ],
         "Scale": [
-          3.296300172805786,
-          3.296300172805786,
-          3.296300172805786
+          1.0,
+          1.0,
+          1.0
         ],
         "Translation": [
           0.0,
-          3.14296555519104,
-          0.0
+          3.092582941055298,
+          5.05916166305542
         ]
       }
     },
@@ -59,12 +81,12 @@
       }
     },
     {
-      "ID": 17258450948503458192,
+      "ID": 12191261093871392135,
       "MeshRenderer": {
-        "ModelPath": "Assets/Models/monkey.obj",
+        "ModelPath": "Assets/Models/Wall/wall.gltf",
         "ShaderPath": "Assets/Shaders/Lit.glsl"
       },
-      "Tag": "monkey",
+      "Tag": "wall",
       "Transform": {
         "Rotation": [
           0.0,
@@ -72,14 +94,14 @@
           0.0
         ],
         "Scale": [
-          1.0,
-          1.0,
-          1.0
+          3.296300172805786,
+          3.296300172805786,
+          3.296300172805786
         ],
         "Translation": [
           0.0,
-          3.092582941055298,
-          5.05916166305542
+          3.14296555519104,
+          0.0
         ]
       }
     }
