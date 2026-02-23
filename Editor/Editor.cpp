@@ -5,7 +5,6 @@
 
 #include <Engine/Scene/Scene.h>
 #include <Engine/Scene/Components.h>
-#include <Engine/Scene/SceneSerializer.h>
 #include <Engine/Scene/UUID.h>
 
 #include <Engine/Assets/AssetManager.h>
@@ -16,6 +15,8 @@
 #include <Engine/Renderer/Buffer.h>
 
 #include "CommandStack.h"
+#include "EditorSceneManager.h"
+#include "ProjectSettings.h"
 
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
@@ -32,6 +33,7 @@
 #include <cmath>
 #include <vector>
 #include <cstddef>
+#include <string>
 
 using namespace Engine;
 
@@ -58,7 +60,6 @@ static uint32_t FoldUUIDToPickID(UUID id) {
 }
 
 // ---------------- Grid ----------------
-
 static std::shared_ptr<VertexArray> CreateGridPlaneVAO(float halfSize) {
     float v[] = {
         -halfSize, 0.f, -halfSize,
@@ -79,11 +80,7 @@ static std::shared_ptr<VertexArray> CreateGridPlaneVAO(float halfSize) {
 }
 
 // ---------------- Gizmo Lines (Editor-only) ----------------
-
-struct GizmoVertex {
-    glm::vec3 Pos;
-    glm::vec3 Col;
-};
+struct GizmoVertex { glm::vec3 Pos; glm::vec3 Col; };
 
 struct GizmoRenderer {
     GLuint VAO = 0, VBO = 0;
@@ -130,8 +127,7 @@ struct GizmoRenderer {
 };
 
 static void AddLine(std::vector<GizmoVertex>& out, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
-    out.push_back({ a, c });
-    out.push_back({ b, c });
+    out.push_back({ a, c }); out.push_back({ b, c });
 }
 
 static void AddArrow(std::vector<GizmoVertex>& out,
@@ -191,8 +187,14 @@ static void AddCircle(std::vector<GizmoVertex>& out,
     }
 }
 
+static void UpdateWindowTitle(GLFWwindow* native, const std::string& sceneName, bool dirty) {
+    std::string title = "Engine3D Editor - " + sceneName;
+    if (dirty) title += " *";
+    glfwSetWindowTitle(native, title.c_str());
+}
+
 int main() {
-    auto window = Window::Create({ "Engine3D Editor (ImGui)", 1600, 900 });
+    auto window = Window::Create({ "Engine3D Editor", 1600, 900 });
     GLFWwindow* native = (GLFWwindow*)window->GetNativeWindow();
 
     Renderer::Init();
@@ -207,30 +209,11 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(native, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-    // Scene load/create
+    // Scene + serializer
     Scene scene;
-    SceneSerializer serializer(scene);
-    const std::string scenePath = "Assets/Scenes/Sandbox.scene";
-
-    if (!serializer.Deserialize(scenePath)) {
-        auto& assets = AssetManager::Get();
-        AssetHandle litShaderH = assets.LoadShader("Assets/Shaders/Lit.glsl");
-        AssetHandle monkeyModelH = assets.LoadModel("Assets/Models/monkey.obj", litShaderH);
-
-        auto monkey = scene.CreateEntity("Monkey");
-        monkey.AddComponent<MeshRendererComponent>(monkeyModelH);
-
-        auto sun = scene.CreateEntity("SunLight");
-        auto& dl = sun.AddComponent<DirectionalLightComponent>();
-        dl.Direction = glm::vec3(0.4f, 0.8f, -0.3f);
-        dl.Color = glm::vec3(1.0f);
-
-        serializer.Serialize(scenePath);
-    }
 
     // Pipeline + camera
     RendererPipeline pipeline;
-
     CameraController editorCam(1.0472f, 1600.0f / 900.0f, 0.1f, 300.0f);
     editorCam.SetTransform(glm::vec3(0.0f, 8.0f, 8.0f), -3.1415926f, -0.75f);
 
@@ -244,10 +227,10 @@ int main() {
     GizmoRenderer gizmoRenderer;
     gizmoRenderer.Init();
 
-    // -------- E6 State --------
+    // -------- Undo/Selection State --------
     EditorUndo::CommandStack cmdStack;
-    UUID selectedUUID = 0;          // stable selection
-    uint32_t selectedPickID = 0;    // outline ID
+    UUID selectedUUID = 0;
+    uint32_t selectedPickID = 0;
     Entity selectedEntity{};
 
     GizmoMode gizmo = GizmoMode::None;
@@ -291,11 +274,30 @@ int main() {
         SyncSelection();
         };
 
-    // Timing
-    auto last = std::chrono::high_resolution_clock::now();
+    // -------- Scene workflow manager --------
+    EditorSceneManager sceneMgr(scene, cmdStack, [&]() {
+        ClearSelection();
+        });
+
+    // Start by opening default if exists, else create new
+    if (!sceneMgr.OpenScene("Assets/Scenes/Sandbox.scene")) {
+        sceneMgr.NewScene();
+        sceneMgr.SaveAs("Assets/Scenes/Sandbox.scene");
+    }
+
+    // Unsaved changes modal state
+    enum class PendingAction { None, NewScene, OpenScene };
+    PendingAction pending = PendingAction::None;
+    std::string pendingOpenPath;
+
+    // Save As popup buffer
+    static char saveAsBuf[260] = "Assets/Scenes/NewScene.scene";
 
     // Inspector undo snapshot
     static EditorUndo::TransformSnapshot inspectorBefore{};
+
+    // Timing
+    auto last = std::chrono::high_resolution_clock::now();
 
     while (!window->ShouldClose()) {
         glfwPollEvents();
@@ -303,6 +305,8 @@ int main() {
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration<float>(now - last).count();
         last = now;
+
+        UpdateWindowTitle(native, sceneMgr.GetDisplayName(), sceneMgr.IsDirty());
 
         // Begin ImGui
         ImGui_ImplOpenGL3_NewFrame();
@@ -328,14 +332,56 @@ int main() {
             ImGuiID dockspaceID = ImGui::GetID("MyDockSpace");
             ImGui::DockSpace(dockspaceID, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
 
+            // Menu
             if (ImGui::BeginMenuBar()) {
                 if (ImGui::BeginMenu("File")) {
-                    if (ImGui::MenuItem("Save", "Ctrl+S")) serializer.Serialize(scenePath);
+                    if (ImGui::MenuItem("New")) {
+                        if (sceneMgr.IsDirty()) {
+                            pending = PendingAction::NewScene;
+                            ImGui::OpenPopup("Unsaved Changes");
+                        }
+                        else {
+                            sceneMgr.NewScene();
+                        }
+                    }
 
-                    if (ImGui::MenuItem("Reload", "Ctrl+R")) {
-                        serializer.Deserialize(scenePath);
-                        cmdStack.Clear();
-                        ClearSelection();
+                    if (ImGui::BeginMenu("Open")) {
+                        sceneMgr.RefreshSceneList();
+                        for (const auto& s : sceneMgr.GetSceneList()) {
+                            if (ImGui::MenuItem(s.c_str())) {
+                                if (sceneMgr.IsDirty()) {
+                                    pending = PendingAction::OpenScene;
+                                    pendingOpenPath = s;
+                                    ImGui::OpenPopup("Unsaved Changes");
+                                }
+                                else {
+                                    sceneMgr.OpenScene(s);
+                                }
+                            }
+                        }
+                        ImGui::EndMenu();
+                    }
+
+                    if (ImGui::MenuItem("Save", "Ctrl+S")) {
+                        if (!sceneMgr.Save()) {
+                            // if never saved, fall back to Save As popup
+                            std::snprintf(saveAsBuf, sizeof(saveAsBuf), "%s", "Assets/Scenes/NewScene.scene");
+                            ImGui::OpenPopup("Save As");
+                        }
+                    }
+
+                    if (ImGui::MenuItem("Save As...")) {
+                        std::string guess = sceneMgr.GetCurrentPath().empty()
+                            ? "Assets/Scenes/NewScene.scene"
+                            : sceneMgr.GetCurrentPath();
+                        std::snprintf(saveAsBuf, sizeof(saveAsBuf), "%s", guess.c_str());
+                        ImGui::OpenPopup("Save As");
+                    }
+
+                    if (ImGui::MenuItem("Set As Startup Scene")) {
+                        if (!sceneMgr.GetCurrentPath().empty()) {
+                            EditorProject::SaveStartupScene(sceneMgr.GetCurrentPath());
+                        }
                     }
 
                     if (ImGui::MenuItem("Exit")) glfwSetWindowShouldClose(native, 1);
@@ -344,22 +390,132 @@ int main() {
                 ImGui::EndMenuBar();
             }
 
+            // --- Unsaved Changes Modal ---
+            if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("You have unsaved changes.\nWhat do you want to do?");
+                ImGui::Separator();
+
+                if (ImGui::Button("Save")) {
+                    if (!sceneMgr.Save()) {
+                        // if never saved, ask for Save As
+                        std::snprintf(saveAsBuf, sizeof(saveAsBuf), "%s", "Assets/Scenes/NewScene.scene");
+                        ImGui::OpenPopup("Save As");
+                    }
+                    else {
+                        ImGui::CloseCurrentPopup();
+                        // continue pending action after save
+                        if (pending == PendingAction::NewScene) sceneMgr.NewScene();
+                        if (pending == PendingAction::OpenScene) sceneMgr.OpenScene(pendingOpenPath);
+                        pending = PendingAction::None;
+                        pendingOpenPath.clear();
+                    }
+                }
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Don't Save")) {
+                    ImGui::CloseCurrentPopup();
+                    if (pending == PendingAction::NewScene) sceneMgr.NewScene();
+                    if (pending == PendingAction::OpenScene) sceneMgr.OpenScene(pendingOpenPath);
+                    pending = PendingAction::None;
+                    pendingOpenPath.clear();
+                }
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Cancel")) {
+                    ImGui::CloseCurrentPopup();
+                    pending = PendingAction::None;
+                    pendingOpenPath.clear();
+                }
+
+                ImGui::EndPopup();
+            }
+
+            // --- Save As Modal ---
+            if (ImGui::BeginPopupModal("Save As", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("Save scene as:");
+                ImGui::InputText("Path", saveAsBuf, sizeof(saveAsBuf));
+                ImGui::Separator();
+
+                if (ImGui::Button("Save")) {
+                    sceneMgr.SaveAs(saveAsBuf);
+                    ImGui::CloseCurrentPopup();
+
+                    // If unsaved-changes modal was waiting on a Save,
+                    // continue the pending action now.
+                    if (pending != PendingAction::None) {
+                        if (pending == PendingAction::NewScene) sceneMgr.NewScene();
+                        if (pending == PendingAction::OpenScene) sceneMgr.OpenScene(pendingOpenPath);
+                        pending = PendingAction::None;
+                        pendingOpenPath.clear();
+                    }
+                }
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Cancel")) {
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+            }
+
+            ImGui::End(); // DockSpace
+        }
+
+        // --- Global hotkeys ---
+        if (!io.WantCaptureKeyboard) {
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+                if (!sceneMgr.Save()) {
+                    std::string guess = sceneMgr.GetCurrentPath().empty()
+                        ? "Assets/Scenes/NewScene.scene"
+                        : sceneMgr.GetCurrentPath();
+                    std::snprintf(saveAsBuf, sizeof(saveAsBuf), "%s", guess.c_str());
+                    ImGui::OpenPopup("Save As");
+                }
+            }
+
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+                cmdStack.Undo(scene);
+                sceneMgr.MarkDirty();
+                SyncSelection();
+            }
+
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) {
+                cmdStack.Redo(scene);
+                sceneMgr.MarkDirty();
+                SyncSelection();
+            }
+        }
+
+        // --- Scene Browser panel (optional but helpful) ---
+        {
+            ImGui::Begin("Scene Browser");
+            ImGui::Text("Current: %s%s",
+                sceneMgr.GetDisplayName().c_str(),
+                sceneMgr.IsDirty() ? " *" : "");
+
+            if (ImGui::Button("Refresh")) sceneMgr.RefreshSceneList();
+            ImGui::Separator();
+
+            for (const auto& s : sceneMgr.GetSceneList()) {
+                bool isCurrent = (s == sceneMgr.GetCurrentPath());
+                if (ImGui::Selectable(s.c_str(), isCurrent)) {
+                    if (sceneMgr.IsDirty()) {
+                        pending = PendingAction::OpenScene;
+                        pendingOpenPath = s;
+                        ImGui::OpenPopup("Unsaved Changes");
+                    }
+                    else {
+                        sceneMgr.OpenScene(s);
+                    }
+                }
+            }
             ImGui::End();
         }
 
-        // Undo/Redo hotkeys (global)
-        if (!io.WantCaptureKeyboard) {
-            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) {
-                cmdStack.Undo(scene);
-                SyncSelection();
-            }
-            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) {
-                cmdStack.Redo(scene);
-                SyncSelection();
-            }
-        }
-
-        // Hierarchy
+        // --- Hierarchy ---
         {
             ImGui::Begin("Hierarchy");
             auto view = scene.Registry().view<IDComponent, TagComponent>();
@@ -372,19 +528,18 @@ int main() {
                 }
                 });
 
-            if (ImGui::Button("Clear Selection")) {
-                ClearSelection();
-            }
+            if (ImGui::Button("Clear Selection")) ClearSelection();
             ImGui::End();
         }
 
-        // Inspector
+        // --- Inspector ---
         {
             ImGui::Begin("Inspector");
             if (selectedEntity) {
                 auto& tag = selectedEntity.GetComponent<TagComponent>().Tag;
                 ImGui::Text("Entity: %s", tag.c_str());
-                ImGui::Text("UUID: %llu", (unsigned long long)selectedUUID);
+                ImGui::Text("Scene: %s", sceneMgr.GetDisplayName().c_str());
+                ImGui::Text("Dirty: %s", sceneMgr.IsDirty() ? "Yes" : "No");
                 ImGui::Text("Axis: %s", AxisName(axis));
 
                 auto& tr = selectedEntity.GetComponent<TransformComponent>();
@@ -397,8 +552,10 @@ int main() {
                 if (ImGui::IsItemActivated()) inspectorBefore = EditorUndo::CaptureTransform(selectedEntity);
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     auto after = EditorUndo::CaptureTransform(selectedEntity);
-                    if (!EditorUndo::TransformEqual(inspectorBefore, after))
+                    if (!EditorUndo::TransformEqual(inspectorBefore, after)) {
                         cmdStack.Commit(std::make_unique<EditorUndo::TransformCommand>(selectedUUID, inspectorBefore, after));
+                        sceneMgr.MarkDirty();
+                    }
                 }
 
                 // Rotation (degrees UI)
@@ -416,8 +573,10 @@ int main() {
                 if (ImGui::IsItemActivated()) inspectorBefore = EditorUndo::CaptureTransform(selectedEntity);
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     auto after = EditorUndo::CaptureTransform(selectedEntity);
-                    if (!EditorUndo::TransformEqual(inspectorBefore, after))
+                    if (!EditorUndo::TransformEqual(inspectorBefore, after)) {
                         cmdStack.Commit(std::make_unique<EditorUndo::TransformCommand>(selectedUUID, inspectorBefore, after));
+                        sceneMgr.MarkDirty();
+                    }
                 }
 
                 // Scale
@@ -425,8 +584,10 @@ int main() {
                 if (ImGui::IsItemActivated()) inspectorBefore = EditorUndo::CaptureTransform(selectedEntity);
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     auto after = EditorUndo::CaptureTransform(selectedEntity);
-                    if (!EditorUndo::TransformEqual(inspectorBefore, after))
+                    if (!EditorUndo::TransformEqual(inspectorBefore, after)) {
                         cmdStack.Commit(std::make_unique<EditorUndo::TransformCommand>(selectedUUID, inspectorBefore, after));
+                        sceneMgr.MarkDirty();
+                    }
                 }
 
                 ImGui::Separator();
@@ -437,7 +598,6 @@ int main() {
                 ImGui::SameLine();
                 if (ImGui::Button("Scale (F)")) gizmo = GizmoMode::Scale;
                 if (ImGui::Button("None (Esc)")) { gizmo = GizmoMode::None; dragging = false; }
-
                 ImGui::Text("Ctrl = snap | X/Y/Z = axis constraint");
             }
             else {
@@ -446,10 +606,9 @@ int main() {
             ImGui::End();
         }
 
-        // Viewport
+        // --- Viewport ---
         ImGui::Begin("Viewport");
 
-        // Stable viewport rect
         ImVec2 vpMin = ImGui::GetCursorScreenPos();
         ImVec2 vpSize = ImGui::GetContentRegionAvail();
         if (vpSize.x < 1) vpSize.x = 1;
@@ -472,23 +631,23 @@ int main() {
             if (ImGui::IsKeyPressed(ImGuiKey_Y)) axis = (axis == AxisConstraint::Y) ? AxisConstraint::None : AxisConstraint::Y;
             if (ImGui::IsKeyPressed(ImGuiKey_Z)) axis = (axis == AxisConstraint::Z) ? AxisConstraint::None : AxisConstraint::Z;
 
-            // Delete
             if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedEntity) {
                 auto snap = EditorUndo::CaptureEntity(selectedEntity);
                 cmdStack.Execute(scene, std::make_unique<EditorUndo::DeleteEntityCommand>(snap));
+                sceneMgr.MarkDirty();
                 ClearSelection();
             }
 
-            // Duplicate
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedEntity) {
                 UUID newID = GenerateUUID();
                 auto snap = EditorUndo::MakeDuplicateSnapshot(scene, selectedEntity, newID);
                 cmdStack.Execute(scene, std::make_unique<EditorUndo::CreateEntityCommand>(snap));
+                sceneMgr.MarkDirty();
                 SelectByUUID(newID);
             }
         }
 
-        // Camera control: viewport rect hover + RMB
+        // Camera control
         bool viewportRectHovered = ImGui::IsMouseHoveringRect(vpMin, vpMax, false);
         bool cameraControl = viewportRectHovered && ImGui::IsMouseDown(ImGuiMouseButton_Right);
 
@@ -516,7 +675,7 @@ int main() {
 
         pipeline.EndScenePass();
 
-        // Draw simple gizmo indicator lines (optional)
+        // Gizmo visuals
         if (selectedEntity && gizmo != GizmoMode::None) {
             std::vector<GizmoVertex> verts;
             verts.reserve(2048);
@@ -561,13 +720,10 @@ int main() {
 
         pipeline.Compose();
 
-        // Present to ImGui
         ImTextureID tex = (ImTextureID)(intptr_t)pipeline.GetCompositeTexture();
         ImGui::Image(tex, vpSize, ImVec2(0, 1), ImVec2(1, 0));
 
         bool imageHovered = ImGui::IsItemHovered();
-
-        // Image rect for proper mouse coords
         ImVec2 imgMin = ImGui::GetItemRectMin();
         ImVec2 imgMax = ImGui::GetItemRectMax();
         ImVec2 imgSize = ImVec2(imgMax.x - imgMin.x, imgMax.y - imgMin.y);
@@ -576,14 +732,13 @@ int main() {
         float mx = mp.x - imgMin.x;
         float my = mp.y - imgMin.y;
 
-        // clamp
         if (mx < 0) mx = 0; if (my < 0) my = 0;
         if (mx > imgSize.x - 1) mx = imgSize.x - 1;
         if (my > imgSize.y - 1) my = imgSize.y - 1;
 
         bool ctrlDown = io.KeyCtrl;
 
-        // Start drag / pick (ignore while flying camera)
+        // Start drag / pick
         if (!cameraControl && imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             if (gizmo != GizmoMode::None && selectedEntity) {
                 dragging = true;
@@ -601,7 +756,7 @@ int main() {
             }
         }
 
-        // Dragging transform (axis constraints)
+        // Apply drag
         if (!cameraControl && dragging && gizmo != GizmoMode::None && selectedEntity) {
             float dx = mx - dragStartX;
             float dy = my - dragStartY;
@@ -617,7 +772,6 @@ int main() {
 
             if (gizmo == GizmoMode::Translate) {
                 float scale = 0.0020f * dist;
-
                 glm::vec3 out = dragStartTranslation;
 
                 if (axis == AxisConstraint::None) {
@@ -664,7 +818,7 @@ int main() {
                 if (ax == AxisConstraint::Z) out.z = dragStartRotation.z + delta;
 
                 if (ctrlDown) {
-                    float step = 3.1415926f / 12.0f; // 15 deg
+                    float step = 3.1415926f / 12.0f;
                     out.x = SnapFloat(out.x, step);
                     out.y = SnapFloat(out.y, step);
                     out.z = SnapFloat(out.z, step);
@@ -678,9 +832,7 @@ int main() {
 
                 glm::vec3 out = dragStartScale;
 
-                if (axis == AxisConstraint::None) {
-                    out = dragStartScale * s;
-                }
+                if (axis == AxisConstraint::None) out = dragStartScale * s;
                 else {
                     if (axis == AxisConstraint::X) out.x = dragStartScale.x * s;
                     if (axis == AxisConstraint::Y) out.y = dragStartScale.y * s;
@@ -698,7 +850,7 @@ int main() {
             }
         }
 
-        // Commit transform command when drag ends
+        // Commit transform command on release
         bool releasedLMB = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
         if (releasedLMB && dragging && selectedEntity) {
             EditorUndo::TransformSnapshot before{ dragStartTranslation, dragStartRotation, dragStartScale };
@@ -706,6 +858,7 @@ int main() {
 
             if (!EditorUndo::TransformEqual(before, after)) {
                 cmdStack.Commit(std::make_unique<EditorUndo::TransformCommand>(selectedUUID, before, after));
+                sceneMgr.MarkDirty();
             }
 
             dragging = false;
@@ -716,7 +869,7 @@ int main() {
 
         ImGui::End(); // Viewport
 
-        // End ImGui + present
+        // Render ImGui to screen
         ImGui::Render();
 
         int displayW, displayH;
@@ -728,16 +881,6 @@ int main() {
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(native);
-
-        // Global Save/Reload
-        if (!io.WantCaptureKeyboard) {
-            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) serializer.Serialize(scenePath);
-            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {
-                serializer.Deserialize(scenePath);
-                cmdStack.Clear();
-                ClearSelection();
-            }
-        }
     }
 
     // Shutdown
