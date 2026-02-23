@@ -38,6 +38,9 @@ namespace Engine {
 
         void BeginOverlayPass(); // binds scene framebuffer, no clear
         void EndOverlayPass();   // currently no-op
+        float m_Exposure = 1.0f;
+        int   m_Tonemap = 2;     // ACES default
+        float m_Vignette = 0.0f;
     private:
         void EnsureSceneResources(uint32_t width, uint32_t height);
         void EnsurePickingResources(uint32_t width, uint32_t height);

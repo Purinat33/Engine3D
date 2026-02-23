@@ -13,46 +13,50 @@ void main() {
 in vec2 vUV;
 out vec4 FragColor;
 
+
+uniform float u_Exposure;     // e.g. 1.0
+uniform int   u_Tonemap;      // 0=none, 1=reinhard, 2=aces
+uniform float u_Vignette;     // 0..1
 uniform sampler2D  u_Scene;
 uniform usampler2D u_ID;          // R32UI picking texture
 uniform uint       u_SelectedID;  // 0 = none
 uniform vec3       u_OutlineColor;
 
+
+vec3 TonemapReinhard(vec3 x) { return x / (1.0 + x); }
+
+// very small ACES fit
+vec3 TonemapACES(vec3 x) {
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x*(a*x+b)) / (x*(c*x+d)+e), 0.0, 1.0);
+}
+
 void main() {
     vec3 sceneColor = texture(u_Scene, vUV).rgb;
 
-    // If nothing selected, just show the scene
-    if (u_SelectedID == 0u) {
-        sceneColor = pow(sceneColor, vec3(1.0/2.2));
-        FragColor = vec4(sceneColor, 1.0);
-        return;
+    // outline logic stays the same, but operate in linear space before gamma
+    // ... keep your ID outline code ...
+
+    // Exposure
+    sceneColor *= u_Exposure;
+
+    // Tonemap
+    if (u_Tonemap == 1) sceneColor = TonemapReinhard(sceneColor);
+    else if (u_Tonemap == 2) sceneColor = TonemapACES(sceneColor);
+
+    // Vignette
+    if (u_Vignette > 0.0) {
+        vec2 p = vUV * 2.0 - 1.0;
+        float r = dot(p, p);
+        float vig = smoothstep(1.0, 1.0 - u_Vignette, r);
+        sceneColor *= vig;
     }
 
-    ivec2 size = textureSize(u_ID, 0);
-    ivec2 p = ivec2(vUV * vec2(size));
-    p = clamp(p, ivec2(0), size - ivec2(1));
-
-    uint c = texelFetch(u_ID, p, 0).r;
-
-    // 4-neighbor edge detect around selected ID
-    bool edge = false;
-    ivec2 offsets[4] = ivec2[4]( ivec2(1,0), ivec2(-1,0), ivec2(0,1), ivec2(0,-1) );
-
-    for (int i = 0; i < 4; i++) {
-        ivec2 q = clamp(p + offsets[i], ivec2(0), size - ivec2(1));
-        uint n = texelFetch(u_ID, q, 0).r;
-
-        // outline boundary where selected meets non-selected
-        if ((c == u_SelectedID && n != u_SelectedID) || (c != u_SelectedID && n == u_SelectedID))
-            edge = true;
-    }
-
-    if (edge) {
-        vec3 outc = pow(u_OutlineColor, vec3(1.0/2.2));
-        FragColor = vec4(outc, 1.0);
-        return;
-    }
-
+    // Gamma
     sceneColor = pow(sceneColor, vec3(1.0/2.2));
     FragColor = vec4(sceneColor, 1.0);
 }

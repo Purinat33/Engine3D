@@ -41,7 +41,7 @@ namespace Engine {
         // Later: scripts, animation, physics, etc.
     }
 
-    void Scene::OnRender(const PerspectiveCamera& /*camera*/) {
+    void Scene::OnRender(const PerspectiveCamera& camera) {
         auto& assets = AssetManager::Get();
 
         // --- Lighting: pick first directional light, or use a default ---

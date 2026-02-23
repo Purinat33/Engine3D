@@ -142,6 +142,9 @@ namespace Engine {
 
     void RendererPipeline::DrawFullscreen() {
         m_ScreenShader->Bind();
+        m_ScreenShader->SetFloat("u_Exposure", m_Exposure);
+        m_ScreenShader->SetInt("u_Tonemap", m_Tonemap);
+        m_ScreenShader->SetFloat("u_Vignette", m_Vignette);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_SceneFB->GetColorAttachmentRendererID());
