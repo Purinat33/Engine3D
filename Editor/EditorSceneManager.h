@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <functional>
+#include <algorithm>
 
 #include <Engine/Scene/Scene.h>
 #include <Engine/Scene/SceneSerializer.h>
@@ -84,21 +86,50 @@ public:
         return true;
     }
 
+    static std::string EnsureSceneExt(std::string path) {
+        if (path.empty()) return path;
+        std::filesystem::path p(path);
+        if (p.extension() != ".scene")
+            p.replace_extension(".scene");
+        return p.generic_string();
+    }
+
     bool Save() {
         if (m_CurrentPath.empty())
             return false;
-        m_Serializer.Serialize(m_CurrentPath);
+
+        const std::string path = EnsureSceneExt(m_CurrentPath);
+
+        const bool ok = m_Serializer.Serialize(path);
+        if (!ok) {
+            // keep dirty, keep current path (so user can retry / fix)
+            m_Dirty = true;
+            return false;
+        }
+
+        m_CurrentPath = path;
         m_Dirty = false;
         RefreshSceneList();
         return true;
     }
 
-    bool SaveAs(const std::string& path) {
-        if (path.empty()) return false;
+    bool SaveAs(const std::string& inPath) {
+        if (inPath.empty())
+            return false;
+
+        const std::string path = EnsureSceneExt(inPath);
+
+        const bool ok = m_Serializer.Serialize(path);
+        if (!ok) {
+            // do NOT change current path on failure
+            m_Dirty = true;
+            return false;
+        }
+
         m_CurrentPath = path;
-        m_Serializer.Serialize(m_CurrentPath);
         m_Dirty = false;
         RefreshSceneList();
+        if (m_OnSceneChanged) m_OnSceneChanged();
         return true;
     }
 

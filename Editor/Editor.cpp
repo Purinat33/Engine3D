@@ -43,6 +43,12 @@ using namespace Engine;
 enum class GizmoMode { None, Translate, Rotate, Scale };
 enum class AxisConstraint { None, X, Y, Z };
 
+static bool openNewScenePopup = false;
+static char newSceneNameBuf[128] = "NewScene";
+static std::string statusText;
+static float statusTimer = 0.0f;
+
+
 static const char* AxisName(AxisConstraint a) {
     switch (a) {
     case AxisConstraint::X: return "X";
@@ -379,16 +385,20 @@ int main() {
             ImGuiID dockspaceID = ImGui::GetID("MyDockSpace");
             ImGui::DockSpace(dockspaceID, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
 
+            // --- popup requests (IMPORTANT) ---
+            static bool requestOpenSaveAs = false;
+
             // Menu
             if (ImGui::BeginMenuBar()) {
                 if (ImGui::BeginMenu("File")) {
-                    if (ImGui::MenuItem("New")) {
+
+                    if (ImGui::MenuItem("New...")) {
                         if (sceneMgr.IsDirty()) {
                             pending = PendingAction::NewScene;
                             ImGui::OpenPopup("Unsaved Changes");
                         }
                         else {
-                            sceneMgr.NewScene();
+                            openNewScenePopup = true; // request
                         }
                     }
 
@@ -410,10 +420,15 @@ int main() {
                     }
 
                     if (ImGui::MenuItem("Save", "Ctrl+S")) {
-                        if (!sceneMgr.Save()) {
-                            // if never saved, fall back to Save As popup
+                        if (sceneMgr.Save()) {
+                            statusText = "Saved.";
+                            statusTimer = 2.0f;
+                        }
+                        else {
                             std::snprintf(saveAsBuf, sizeof(saveAsBuf), "%s", "Assets/Scenes/NewScene.scene");
-                            ImGui::OpenPopup("Save As");
+                            requestOpenSaveAs = true; // request (DON'T OpenPopup here)
+                            statusText = "Scene has no path. Use Save As.";
+                            statusTimer = 3.0f;
                         }
                     }
 
@@ -422,7 +437,7 @@ int main() {
                             ? "Assets/Scenes/NewScene.scene"
                             : sceneMgr.GetCurrentPath();
                         std::snprintf(saveAsBuf, sizeof(saveAsBuf), "%s", guess.c_str());
-                        ImGui::OpenPopup("Save As");
+                        requestOpenSaveAs = true; // request
                     }
 
                     if (ImGui::MenuItem("Set As Startup Scene")) {
@@ -432,9 +447,20 @@ int main() {
                     }
 
                     if (ImGui::MenuItem("Exit")) glfwSetWindowShouldClose(native, 1);
+
                     ImGui::EndMenu();
                 }
                 ImGui::EndMenuBar();
+            }
+
+            // --- Open popups OUTSIDE menus/modals ---
+            if (openNewScenePopup) {
+                ImGui::OpenPopup("New Scene");
+                openNewScenePopup = false;
+            }
+            if (requestOpenSaveAs) {
+                ImGui::OpenPopup("Save As");
+                requestOpenSaveAs = false;
             }
 
             // --- Unsaved Changes Modal ---
@@ -444,15 +470,18 @@ int main() {
 
                 if (ImGui::Button("Save")) {
                     if (!sceneMgr.Save()) {
-                        // if never saved, ask for Save As
+                        // MUST close this modal before opening another modal
                         std::snprintf(saveAsBuf, sizeof(saveAsBuf), "%s", "Assets/Scenes/NewScene.scene");
+                        ImGui::CloseCurrentPopup();
                         ImGui::OpenPopup("Save As");
+                        // keep pending as-is; Save As will continue it
                     }
                     else {
                         ImGui::CloseCurrentPopup();
-                        // continue pending action after save
-                        if (pending == PendingAction::NewScene) sceneMgr.NewScene();
+
+                        if (pending == PendingAction::NewScene) openNewScenePopup = true;
                         if (pending == PendingAction::OpenScene) sceneMgr.OpenScene(pendingOpenPath);
+
                         pending = PendingAction::None;
                         pendingOpenPath.clear();
                     }
@@ -462,8 +491,10 @@ int main() {
 
                 if (ImGui::Button("Don't Save")) {
                     ImGui::CloseCurrentPopup();
-                    if (pending == PendingAction::NewScene) sceneMgr.NewScene();
+
+                    if (pending == PendingAction::NewScene) openNewScenePopup = true;
                     if (pending == PendingAction::OpenScene) sceneMgr.OpenScene(pendingOpenPath);
+
                     pending = PendingAction::None;
                     pendingOpenPath.clear();
                 }
@@ -479,6 +510,38 @@ int main() {
                 ImGui::EndPopup();
             }
 
+            // --- New Scene Modal ---
+            if (ImGui::BeginPopupModal("New Scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("Create a new scene in Assets/Scenes/");
+                ImGui::InputText("Name", newSceneNameBuf, sizeof(newSceneNameBuf));
+                ImGui::Separator();
+
+                std::string newPath = std::string("Assets/Scenes/") + newSceneNameBuf + ".scene";
+                ImGui::Text("Path: %s", newPath.c_str());
+
+                if (ImGui::Button("Create")) {
+                    sceneMgr.NewScene();
+
+                    if (sceneMgr.SaveAs(newPath)) {
+                        statusText = "Created: " + newPath;
+                        statusTimer = 3.0f;
+                    }
+                    else {
+                        statusText = "Failed to create: " + newPath;
+                        statusTimer = 5.0f;
+                    }
+
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel")) {
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::EndPopup();
+            }
+
             // --- Save As Modal ---
             if (ImGui::BeginPopupModal("Save As", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
                 ImGui::Text("Save scene as:");
@@ -486,21 +549,28 @@ int main() {
                 ImGui::Separator();
 
                 if (ImGui::Button("Save")) {
-                    sceneMgr.SaveAs(saveAsBuf);
+                    if (sceneMgr.SaveAs(saveAsBuf)) {
+                        statusText = std::string("Saved As: ") + saveAsBuf;
+                        statusTimer = 3.0f;
+                    }
+                    else {
+                        statusText = std::string("Save As failed: ") + saveAsBuf;
+                        statusTimer = 5.0f;
+                    }
+
                     ImGui::CloseCurrentPopup();
 
-                    // If unsaved-changes modal was waiting on a Save,
-                    // continue the pending action now.
+                    // Continue pending action after Save As
                     if (pending != PendingAction::None) {
-                        if (pending == PendingAction::NewScene) sceneMgr.NewScene();
+                        if (pending == PendingAction::NewScene) openNewScenePopup = true;
                         if (pending == PendingAction::OpenScene) sceneMgr.OpenScene(pendingOpenPath);
+
                         pending = PendingAction::None;
                         pendingOpenPath.clear();
                     }
                 }
 
                 ImGui::SameLine();
-
                 if (ImGui::Button("Cancel")) {
                     ImGui::CloseCurrentPopup();
                 }
@@ -687,6 +757,11 @@ int main() {
                         sceneMgr.OpenScene(s);
                     }
                 }
+            }
+            if (statusTimer > 0.0f) {
+                statusTimer -= dt;
+                ImGui::Separator();
+                ImGui::TextWrapped("%s", statusText.c_str());
             }
             ImGui::End();
         }
