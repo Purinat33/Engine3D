@@ -253,15 +253,6 @@ int main() {
         uint32_t vw = (uint32_t)viewportSize.x;
         uint32_t vh = (uint32_t)viewportSize.y;
 
-        // Camera control only when viewport hovered + RMB and ImGui not capturing mouse
-        viewportHovered = ImGui::IsWindowHovered();
-        viewportFocused = ImGui::IsWindowFocused();
-
-        bool cameraControl = viewportHovered && ImGui::IsMouseDown(ImGuiMouseButton_Right) && !io.WantCaptureMouse;
-        editorCam.SetActive(cameraControl);
-        editorCam.OnUpdate(dt);
-        glfwSetInputMode(native, GLFW_CURSOR, cameraControl ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-
         // Hotkeys for gizmo while viewport focused
         if (viewportFocused && !io.WantCaptureKeyboard) {
             if (ImGui::IsKeyPressed(ImGuiKey_G) && selectedEntity) gizmo = GizmoMode::Translate;
@@ -297,6 +288,23 @@ int main() {
         ImTextureID tex = (ImTextureID)(intptr_t)pipeline.GetCompositeTexture();
         ImGui::Image(tex, viewportSize, ImVec2(0, 1), ImVec2(1, 0));
         bool imageHovered = ImGui::IsItemHovered();
+        bool viewportFocused = ImGui::IsWindowFocused();
+
+        // RMB held on the image = camera control
+        bool cameraControl = imageHovered && ImGui::IsMouseDown(ImGuiMouseButton_Right);
+
+        // Only allow WASD when cameraControl and ImGui isn't typing into a widget
+        bool allowKeyboard = cameraControl && !io.WantCaptureKeyboard;
+
+        // IMPORTANT: use allowKeyboard (or cameraControl if your controller gates both mouse+keys)
+        editorCam.SetActive(cameraControl);      // for mouse look gating
+        // If your OnUpdate reads keyboard regardless, change to: editorCam.SetActive(allowKeyboard);
+
+        editorCam.OnUpdate(dt);
+
+        // Lock cursor only while flying
+        glfwSetInputMode(native, GLFW_CURSOR,
+            cameraControl ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 
         // Viewport mouse position (relative to viewport image)
         ImVec2 mp = ImGui::GetMousePos();
