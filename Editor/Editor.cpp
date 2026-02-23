@@ -694,17 +694,21 @@ int main() {
         // --- Hierarchy ---
         {
             ImGui::Begin("Hierarchy");
-            auto view = scene.Registry().view<IDComponent, TagComponent>();
-            view.each([&](auto, IDComponent& idc, TagComponent& tc) {
-                uint32_t pid = FoldUUIDToPickID(idc.ID);
-                bool selected = (selectedPickID == pid);
 
-                if (ImGui::Selectable(tc.Tag.c_str(), selected)) {
-                    SelectByUUID(idc.ID);
-                }
+            auto view = scene.Registry().view<IDComponent, TagComponent>();
+            view.each([&](auto ent, IDComponent& idc, TagComponent& tc)
+                {
+                    // Use UUID as the unique ID scope for everything in this row
+                    ImGui::PushID((void*)(uintptr_t)idc.ID);
+
+                    bool selected = (selectedPickID == FoldUUIDToPickID(idc.ID));
+                    if (ImGui::Selectable(tc.Tag.c_str(), selected)) {
+                        SelectByUUID(idc.ID);
+                    }
+
+                    ImGui::PopID();
                 });
 
-            if (ImGui::Button("Clear Selection")) ClearSelection();
             ImGui::End();
         }
 
