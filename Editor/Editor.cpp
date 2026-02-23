@@ -719,67 +719,67 @@ int main() {
                 ImGui::Text("Axis: %s", AxisName(axis));
 
                 auto& tr = selectedEntity.GetComponent<TransformComponent>();
-                ImGui::Separator();
+                /*ImGui::Separator();
                 ImGui::Text("MeshRenderer");
 
                 auto& assets = AssetManager::Get();
 
-                static std::vector<std::string> diskModels;
-                if (ImGui::Button("Scan Assets/Models")) {
+                static std::vector<std::string> diskModels;*/
+                /*if (ImGui::Button("Scan Assets/Models")) {
                     ScanModelsOnDisk("Assets/Models", diskModels);
-                }
+                }*/
 
-                for (auto& p : diskModels) {
-                    if (ImGui::Selectable(p.c_str())) {
-                        std::snprintf(importModelPathBuf, sizeof(importModelPathBuf), "%s", p.c_str());
-                    }
-                }
+                //for (auto& p : diskModels) {
+                //    if (ImGui::Selectable(p.c_str())) {
+                //        std::snprintf(importModelPathBuf, sizeof(importModelPathBuf), "%s", p.c_str());
+                //    }
+                //}
 
-                // Build model list (reuse the same cached list used by Assets panel)
-                if (ImGui::Button("Refresh Model List")) {
-                    BuildAssetLists(s_ModelAssets, s_ShaderAssets);
-                }
+                //// Build model list (reuse the same cached list used by Assets panel)
+                //if (ImGui::Button("Refresh Model List")) {
+                //    BuildAssetLists(s_ModelAssets, s_ShaderAssets);
+                //}
 
-                if (selectedEntity.HasComponent<MeshRendererComponent>()) {
-                    auto& mrc = selectedEntity.GetComponent<MeshRendererComponent>();
+                //if (selectedEntity.HasComponent<MeshRendererComponent>()) {
+                //    auto& mrc = selectedEntity.GetComponent<MeshRendererComponent>();
 
-                    const AssetMetadata* meta = assets.Registry().Get(mrc.Model);
-                    const char* currentLabel = meta ? meta->Path.c_str() : "<None>";
+                //    const AssetMetadata* meta = assets.Registry().Get(mrc.Model);
+                //    const char* currentLabel = meta ? meta->Path.c_str() : "<None>";
 
-                    if (ImGui::BeginCombo("Model", currentLabel)) {
-                        // None option
-                        {
-                            bool sel = (mrc.Model == InvalidAssetHandle);
-                            if (ImGui::Selectable("<None>", sel)) {
-                                mrc.Model = InvalidAssetHandle;
-                                sceneMgr.MarkDirty();
-                            }
-                        }
+                //    if (ImGui::BeginCombo("Model", currentLabel)) {
+                //        // None option
+                //        {
+                //            bool sel = (mrc.Model == InvalidAssetHandle);
+                //            if (ImGui::Selectable("<None>", sel)) {
+                //                mrc.Model = InvalidAssetHandle;
+                //                sceneMgr.MarkDirty();
+                //            }
+                //        }
 
-                        for (auto& [h, path] : s_ModelAssets) {
-                            bool sel = (h == mrc.Model);
-                            if (ImGui::Selectable(path.c_str(), sel)) {
-                                mrc.Model = h;
-                                sceneMgr.MarkDirty();
-                            }
-                            if (sel) ImGui::SetItemDefaultFocus();
-                        }
-                        ImGui::EndCombo();
-                    }
+                //        for (auto& [h, path] : s_ModelAssets) {
+                //            bool sel = (h == mrc.Model);
+                //            if (ImGui::Selectable(path.c_str(), sel)) {
+                //                mrc.Model = h;
+                //                sceneMgr.MarkDirty();
+                //            }
+                //            if (sel) ImGui::SetItemDefaultFocus();
+                //        }
+                //        ImGui::EndCombo();
+                //    }
 
-                    if (ImGui::Button("Remove MeshRenderer")) {
-                        selectedEntity.RemoveComponent<MeshRendererComponent>();
-                        sceneMgr.MarkDirty();
-                    }
-                }
-                else {
-                    if (ImGui::Button("Add MeshRenderer")) {
-                        if (!s_ModelAssets.empty()) {
-                            selectedEntity.AddComponent<MeshRendererComponent>(s_ModelAssets[0].first);
-                            sceneMgr.MarkDirty();
-                        }
-                    }
-                }
+                //    if (ImGui::Button("Remove MeshRenderer")) {
+                //        selectedEntity.RemoveComponent<MeshRendererComponent>();
+                //        sceneMgr.MarkDirty();
+                //    }
+                //}
+                //else {
+                //    if (ImGui::Button("Add MeshRenderer")) {
+                //        if (!s_ModelAssets.empty()) {
+                //            selectedEntity.AddComponent<MeshRendererComponent>(s_ModelAssets[0].first);
+                //            sceneMgr.MarkDirty();
+                //        }
+                //    }
+                //}
 
                 ImGui::Separator();
                 ImGui::Text("Transform");
