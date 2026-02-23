@@ -48,6 +48,9 @@ namespace Engine {
         m_Window->SetEventCallback([this](Event& e) { this->OnEvent(e); });
 
         Renderer::Init();
+
+        m_CaptureMouse = true;
+        m_Window->SetCursorMode(true);
     }
 
     void Application::OnEvent(Event& e) {
@@ -55,23 +58,37 @@ namespace Engine {
         dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& ev) { return OnWindowClose(ev); });
         dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& ev) { return OnWindowResize(ev); });
 
+        //dispatcher.Dispatch<WindowFocusEvent>([this](WindowFocusEvent& ev) {
+        //    m_HasFocus = ev.IsFocused();
+        //    if (!m_HasFocus) {
+        //        // Always release on focus loss
+        //        m_CaptureMouse = false;
+        //        m_Window->SetCursorMode(false);
+        //    }
+        //    return false;
+        //    });
+
+        // Optional: click to capture when focused
+        //dispatcher.Dispatch<MouseButtonPressedEvent>([this](MouseButtonPressedEvent& mb) {
+        //    if (!m_HasFocus) return false;
+        //    if (mb.GetMouseButton() == 0) { // left click captures
+        //        m_CaptureMouse = true;
+        //        m_Window->SetCursorMode(true);
+        //        return true;
+        //    }
+        //    return false;
+        //    });
         dispatcher.Dispatch<WindowFocusEvent>([this](WindowFocusEvent& ev) {
             m_HasFocus = ev.IsFocused();
+
             if (!m_HasFocus) {
-                // Always release on focus loss
                 m_CaptureMouse = false;
                 m_Window->SetCursorMode(false);
             }
-            return false;
-            });
-
-        // Optional: click to capture when focused
-        dispatcher.Dispatch<MouseButtonPressedEvent>([this](MouseButtonPressedEvent& mb) {
-            if (!m_HasFocus) return false;
-            if (mb.GetMouseButton() == 0) { // left click captures
+            else {
+                // Optional: auto recapture when returning
                 m_CaptureMouse = true;
                 m_Window->SetCursorMode(true);
-                return true;
             }
             return false;
             });
@@ -104,12 +121,12 @@ namespace Engine {
 
         auto& assets = AssetManager::Get();
 
-        AssetHandle litShaderH = assets.LoadShader("Assets/Shaders/Lit.glsl");
-        AssetHandle monkeyModelH = assets.LoadModel("Assets/Models/monkey.obj", litShaderH);
+        /*AssetHandle litShaderH = assets.LoadShader("Assets/Shaders/Lit.glsl");
+        AssetHandle monkeyModelH = assets.LoadModel("Assets/Models/monkey.obj", litShaderH);*/
 
         Scene scene;
 
-        auto monkey = scene.CreateEntity("Monkey");
+        /*auto monkey = scene.CreateEntity("Monkey");
         monkey.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
         monkey.AddComponent<MeshRendererComponent>(monkeyModelH);
 
@@ -117,15 +134,15 @@ namespace Engine {
         sun.AddComponent<DirectionalLightComponent>(
             glm::vec3(0.4f, 0.8f, -0.3f),
             glm::vec3(1.0f, 1.0f, 1.0f)
-        );
+        );*/
 
         SceneSerializer serializer(scene);
-        serializer.Serialize("Assets/Scenes/Sandbox.scene");
+        //serializer.Serialize("Assets/Scenes/Sandbox.scene");
 
         // OPTIONAL: test load immediately (into the same scene)
         serializer.Deserialize("Assets/Scenes/Sandbox.scene");
 
-        monkey = scene.FindEntityByTag("Monkey");
+        //monkey = scene.FindEntityByTag("Monkey");
 
         auto start = std::chrono::high_resolution_clock::now();
         auto last = start;
@@ -145,7 +162,7 @@ namespace Engine {
             //camCtrl.OnUpdate(dt);
 
             // Spin monkey by updating its TransformComponent
-            monkey.GetComponent<TransformComponent>().Rotation.y = t;
+            //monkey.GetComponent<TransformComponent>().Rotation.y = t;
 
             scene.OnUpdate(dt);
 

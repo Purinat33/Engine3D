@@ -117,6 +117,9 @@
     <ClInclude Include="include\Engine\Events\WindowFocusEvent.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\Engine\Project\ProjectSettings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

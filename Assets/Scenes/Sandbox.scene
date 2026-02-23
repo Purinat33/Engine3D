@@ -1,20 +1,62 @@
 {
   "Entities": [
     {
-      "DirectionalLight": {
-        "Color": [
+      "ID": 11243937171332847928,
+      "MeshRenderer": {
+        "ModelPath": "Assets\\Models\\monkey.obj",
+        "ShaderPath": "Assets\\Shaders\\Lit.glsl"
+      },
+      "Tag": "Monkey Copy Copy",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
           1.0,
           1.0,
           1.0
         ],
-        "Direction": [
-          0.4000000059604645,
-          0.800000011920929,
-          -0.30000001192092896
+        "Translation": [
+          3.7453763484954834,
+          0.0,
+          0.0
         ]
+      }
+    },
+    {
+      "ID": 1280582943552269028,
+      "MeshRenderer": {
+        "ModelPath": "Assets\\Models\\monkey.obj",
+        "ShaderPath": "Assets\\Shaders\\Lit.glsl"
       },
-      "ID": 11220316508858700379,
-      "Tag": "SunLight",
+      "Tag": "Monkey Copy",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Translation": [
+          -3.415921926498413,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "ID": 4409978750725164539,
+      "MeshRenderer": {
+        "ModelPath": "Assets\\Models\\monkey.obj",
+        "ShaderPath": "Assets\\Shaders\\Lit.glsl"
+      },
+      "Tag": "Monkey",
       "Transform": {
         "Rotation": [
           0.0,
@@ -34,12 +76,20 @@
       }
     },
     {
-      "ID": 4409978750725164539,
-      "MeshRenderer": {
-        "ModelPath": "Assets\\Models\\monkey.obj",
-        "ShaderPath": "Assets\\Shaders\\Lit.glsl"
+      "DirectionalLight": {
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Direction": [
+          0.4000000059604645,
+          0.800000011920929,
+          -0.30000001192092896
+        ]
       },
-      "Tag": "Monkey",
+      "ID": 11220316508858700379,
+      "Tag": "SunLight",
       "Transform": {
         "Rotation": [
           0.0,
