@@ -149,6 +149,8 @@
     <None Include="..\Assets\Shaders\GizmoLine.shader" />
     <None Include="..\Assets\Shaders\Grid.shader" />
     <None Include="..\Assets\Shaders\ID.shader" />
+    <None Include="..\EngineContent\Shaders\Icon.shader" />
+    <None Include="..\EngineContent\Shaders\Marker.shader" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CommandStack.h" />

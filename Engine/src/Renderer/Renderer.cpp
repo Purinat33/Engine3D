@@ -36,7 +36,9 @@ namespace Engine {
     void Renderer::Flush() {
         for (const auto& cmd : s_DrawList) {
             auto& mat = cmd.MaterialPtr;
+            if (!mat) continue;
             auto& shader = mat->GetShader();
+            if (!shader) continue;
 
             shader->Bind();
             shader->SetMat4("u_ViewProjection", glm::value_ptr(s_ViewProjection));
@@ -92,6 +94,8 @@ namespace Engine {
     void Renderer::Submit(const std::shared_ptr<Material>& material,
         const std::shared_ptr<VertexArray>& vao,
         const glm::mat4& model) {
+        if (!material || !vao) return;
+        if (!material->GetShader()) return;
         Submit(material, vao, model, 0);
     }
 
@@ -101,6 +105,8 @@ namespace Engine {
         uint32_t entityID) {
         uint64_t key = (uint64_t(material->GetShader()->GetRendererID()) << 32) |
             uint64_t(vao->GetRendererID());
+        if (!material || !vao) return;
+        if (!material->GetShader()) return;
 
         DrawCommand cmd;
         cmd.SortKey = key;

@@ -12,7 +12,7 @@ namespace Engine {
         }
 
         template<typename T, typename... Args>
-        T& AddComponent(Args&&... args) {
+        decltype(auto) AddComponent(Args&&... args) {
             return m_Registry->emplace<T>(m_EntityHandle, std::forward<Args>(args)...);
         }
 

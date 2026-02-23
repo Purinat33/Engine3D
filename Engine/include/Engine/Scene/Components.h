@@ -53,4 +53,14 @@ namespace Engine {
         }
     };
 
+    struct SpawnPointComponent {
+        // empty for now
+        uint8_t Dummy = 0;
+    };
+
+    struct SceneWarpComponent {
+        std::string TargetScene = "Assets/Scenes/Sandbox.scene";
+        std::string TargetSpawnTag = ""; // optional, for later
+    };
+
 } // namespace Engine

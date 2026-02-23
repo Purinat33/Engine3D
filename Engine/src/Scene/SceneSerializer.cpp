@@ -78,6 +78,17 @@ namespace Engine {
                     e["DirectionalLight"]["Color"] = Vec3ToJson(lc.Color);
                 }
 
+                // Spawn
+                if (reg.any_of<SpawnPointComponent>(entity)) {
+                    e["SpawnPoint"] = true;
+                }
+
+                if (reg.any_of<SceneWarpComponent>(entity)) {
+                    const auto& sw = reg.get<SceneWarpComponent>(entity);
+                    e["SceneWarp"]["TargetScene"] = sw.TargetScene;
+                    e["SceneWarp"]["TargetSpawnTag"] = sw.TargetSpawnTag;
+                }
+
                 root["Entities"].push_back(e);
                 });
 
@@ -151,6 +162,18 @@ namespace Engine {
                     glm::vec3 dir = dl.contains("Direction") ? JsonToVec3(dl["Direction"]) : glm::vec3(0.4f, 0.8f, -0.3f);
                     glm::vec3 col = dl.contains("Color") ? JsonToVec3(dl["Color"]) : glm::vec3(1.0f);
                     ent.AddComponent<DirectionalLightComponent>(dir, col);
+                }
+
+                // Spawn
+                if (e.contains("SpawnPoint") && e["SpawnPoint"].get<bool>()) {
+                    ent.AddComponent<SpawnPointComponent>();
+                }
+
+                if (e.contains("SceneWarp")) {
+                    auto& sw = ent.AddComponent<SceneWarpComponent>();
+                    const auto& j = e["SceneWarp"];
+                    sw.TargetScene = j.value("TargetScene", "Assets/Scenes/Sandbox.scene");
+                    sw.TargetSpawnTag = j.value("TargetSpawnTag", "");
                 }
             }
 

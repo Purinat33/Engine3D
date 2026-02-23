@@ -28,6 +28,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <Engine/Core/Content.h>
+#include <Engine/Renderer/Texture2D.h>
+#include <Engine/Renderer/Model.h>
+
 #include <filesystem>
 #include <algorithm>
 
@@ -66,6 +70,30 @@ static float SnapFloat(float v, float step) {
 static uint32_t FoldUUIDToPickID(UUID id) {
     uint32_t v = (uint32_t)(id ^ (id >> 32));
     return v == 0 ? 1u : v;
+}
+
+// Icons
+static std::shared_ptr<VertexArray> CreateIconQuadVAO() {
+    // pos.xyz, uv.xy (centered quad in XY plane)
+    float v[] = {
+        -0.5f, -0.5f, 0.0f,  0.f, 0.f,
+         0.5f, -0.5f, 0.0f,  1.f, 0.f,
+         0.5f,  0.5f, 0.0f,  1.f, 1.f,
+        -0.5f,  0.5f, 0.0f,  0.f, 1.f
+    };
+    uint32_t idx[] = { 0, 1, 2, 2, 3, 0 };
+
+    auto vao = std::make_shared<VertexArray>();
+    auto vb = std::make_shared<VertexBuffer>(v, sizeof(v));
+    vb->SetLayout({
+        { ShaderDataType::Float3 }, // pos
+        { ShaderDataType::Float2 }  // uv
+        });
+    vao->AddVertexBuffer(vb);
+
+    auto ib = std::make_shared<IndexBuffer>(idx, 6);
+    vao->SetIndexBuffer(ib);
+    return vao;
 }
 
 // ---------------- Grid ----------------
@@ -246,6 +274,14 @@ static void ScanModelsOnDisk(const std::string& root, std::vector<std::string>& 
     std::sort(out.begin(), out.end());
 }
 
+// Helper for Editor Models
+static glm::vec3 EulerFromForward(const glm::vec3& fwd) {
+    glm::vec3 f = glm::normalize(fwd);
+    float yaw = std::atan2(f.x, -f.z);                     // -Z forward baseline
+    float pitch = std::asin(glm::clamp(f.y, -1.0f, 1.0f));
+    return glm::vec3(pitch, yaw, 0.0f);
+}
+
 int main() {
     auto window = Window::Create({ "Engine3D Editor", 1600, 900 });
     GLFWwindow* native = (GLFWwindow*)window->GetNativeWindow();
@@ -279,6 +315,45 @@ int main() {
     // Gizmo renderer
     GizmoRenderer gizmoRenderer;
     gizmoRenderer.Init();
+
+    // Models for Editors
+    // --- Editor Marker Models (3D) ---
+    std::shared_ptr<Shader> markerShader;
+    std::shared_ptr<Model> markerLight;
+    std::shared_ptr<Model> markerSpawn;
+    std::shared_ptr<Model> markerWarp;
+
+    try {
+        // Use whatever shader you normally use for meshes.
+        // IMPORTANT: this must exist on disk.
+        markerShader = std::make_shared<Shader>(Engine::Content::Resolve("Shaders/Marker.shader"));
+
+        markerLight = std::make_shared<Model>(Engine::Content::Resolve("Editor/Markers/light.glb"), markerShader);
+        markerSpawn = std::make_shared<Model>(Engine::Content::Resolve("Editor/Markers/spawn.glb"), markerShader);
+        markerWarp = std::make_shared<Model>(Engine::Content::Resolve("Editor/Markers/warp.glb"), markerShader);
+        
+        auto SetupMarkerModel = [&](const std::shared_ptr<Model>& m, const glm::vec4& color) {
+            if (!m) return;
+            for (const auto& sm : m->GetSubMeshes()) {
+                if (sm.MaterialPtr) {
+                    sm.MaterialPtr->SetColor(color);
+                    sm.MaterialPtr->SetTwoSided(true);
+                }
+            }
+            };
+
+        SetupMarkerModel(markerLight, { 1.f, 1.f, 0.2f, 1.f }); // yellow-ish
+        SetupMarkerModel(markerSpawn, { 0.2f, 1.f, 0.2f, 1.f }); // green-ish
+        SetupMarkerModel(markerWarp, { 0.2f, 0.6f, 1.f, 1.f }); // blue-ish
+    
+    }
+    catch (const std::exception& e) {
+        std::cout << "[Editor] Marker models disabled: " << e.what() << "\n";
+        markerShader.reset();
+        markerLight.reset();
+        markerSpawn.reset();
+        markerWarp.reset();
+    }
 
     // -------- Undo/Selection State --------
     EditorUndo::CommandStack cmdStack;
@@ -712,6 +787,24 @@ int main() {
 
         // --- Global hotkeys ---
         if (!io.WantCaptureKeyboard) {
+            // Gizmo hotkeys should work even when Hierarchy/Inspector focused
+            if (selectedEntity) {
+                if (ImGui::IsKeyPressed(ImGuiKey_G)) { gizmo = GizmoMode::Translate; dragging = false; }
+                if (ImGui::IsKeyPressed(ImGuiKey_R)) { gizmo = GizmoMode::Rotate;    dragging = false; }
+                if (ImGui::IsKeyPressed(ImGuiKey_F)) { gizmo = GizmoMode::Scale;     dragging = false; }
+
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                    gizmo = GizmoMode::None;
+                    axis = AxisConstraint::None;
+                    dragging = false;
+                }
+
+                // axis constraint toggles (optional but matches viewport behavior)
+                if (ImGui::IsKeyPressed(ImGuiKey_X)) axis = (axis == AxisConstraint::X) ? AxisConstraint::None : AxisConstraint::X;
+                if (ImGui::IsKeyPressed(ImGuiKey_Y)) axis = (axis == AxisConstraint::Y) ? AxisConstraint::None : AxisConstraint::Y;
+                if (ImGui::IsKeyPressed(ImGuiKey_Z)) axis = (axis == AxisConstraint::Z) ? AxisConstraint::None : AxisConstraint::Z;
+            }
+
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
                 if (!sceneMgr.Save()) {
                     std::string guess = sceneMgr.GetCurrentPath().empty()
@@ -765,15 +858,57 @@ int main() {
             }
             ImGui::End();
         }
+        if (ImGui::BeginMenu("Create")) {
+            if (ImGui::MenuItem("Directional Light")) {
+                Entity e = scene.CreateEntity("DirectionalLight");
+                auto& dl = e.AddComponent<DirectionalLightComponent>();
+
+                auto& tr = e.GetComponent<TransformComponent>();
+                tr.Translation = editorCam.GetPosition() + editorCam.GetForward() * 3.0f;
+
+                // Make the model arrow (-Z) point in the light direction.
+                // If your lighting looks reversed, swap dl.Direction -> -dl.Direction.
+                tr.Rotation = EulerFromForward(dl.Direction);
+
+                sceneMgr.MarkDirty();
+            }
+
+            if (ImGui::MenuItem("Spawn Point")) {
+                Entity e = scene.CreateEntity("SpawnPoint");
+                e.AddComponent<SpawnPointComponent>();
+
+                auto& tr = e.GetComponent<TransformComponent>();
+                tr.Translation = editorCam.GetPosition() + editorCam.GetForward() * 2.0f;
+                tr.Rotation = EulerFromForward(editorCam.GetForward()); // arrow (-Z) points camera-forward
+
+                sceneMgr.MarkDirty();
+            }
+
+            if (ImGui::MenuItem("Scene Warp")) {
+                Entity e = scene.CreateEntity("SceneWarp");
+                e.AddComponent<SceneWarpComponent>(); // default target set in component
+                e.GetComponent<TransformComponent>().Translation =
+                    editorCam.GetPosition() + editorCam.GetForward() * 2.0f;
+                sceneMgr.MarkDirty();
+            }
+
+            ImGui::EndMenu();
+        }
 
         // --- Hierarchy ---
         {
             ImGui::Begin("Hierarchy");
+            UUID requestDeleteUUID = 0;
+
+            //if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedUUID != 0) {
+            //    requestDeleteUUID = selectedUUID;
+            ////}
+
+            //UUID requestDeleteUUID = 0; // <-- ADD: defer deletion until after iteration
 
             auto view = scene.Registry().view<IDComponent, TagComponent>();
             view.each([&](auto ent, IDComponent& idc, TagComponent& tc)
                 {
-                    // Use UUID as the unique ID scope for everything in this row
                     ImGui::PushID((void*)(uintptr_t)idc.ID);
 
                     bool selected = (selectedPickID == FoldUUIDToPickID(idc.ID));
@@ -781,8 +916,31 @@ int main() {
                         SelectByUUID(idc.ID);
                     }
 
+                    // --- ADD: Right-click context menu on this item ---
+                    if (ImGui::BeginPopupContextItem("EntityContext")) {
+                        if (ImGui::MenuItem("Delete")) {
+                            requestDeleteUUID = idc.ID; // queue delete
+                        }
+                        ImGui::EndPopup();
+                    }
+
                     ImGui::PopID();
                 });
+
+            // --- ADD: perform delete AFTER iteration ---
+            if (requestDeleteUUID != 0) {
+                Entity e = scene.FindEntityByUUID(requestDeleteUUID);
+                if (e) {
+                    auto snap = EditorUndo::CaptureEntity(e);
+                    cmdStack.Execute(scene, std::make_unique<EditorUndo::DeleteEntityCommand>(snap));
+                    sceneMgr.MarkDirty();
+
+                    if (selectedUUID == requestDeleteUUID)
+                        ClearSelection();
+                    else
+                        SyncSelection(); // selection might still reference something else
+                }
+            }
 
             ImGui::End();
         }
@@ -859,6 +1017,28 @@ int main() {
                 //        }
                 //    }
                 //}
+                ImGui::Separator();
+                // UI for warp and spawn
+                if (selectedEntity.HasComponent<SpawnPointComponent>()) {
+                    ImGui::Separator();
+                    ImGui::Text("Spawn Point");
+                    ImGui::TextDisabled("Used by runtime to place player later.");
+                }
+
+                if (selectedEntity.HasComponent<SceneWarpComponent>()) {
+                    ImGui::Separator();
+                    ImGui::Text("Scene Warp");
+                    auto& sw = selectedEntity.GetComponent<SceneWarpComponent>();
+
+                    static char targetBuf[260];
+                    std::snprintf(targetBuf, sizeof(targetBuf), "%s", sw.TargetScene.c_str());
+
+                    if (ImGui::InputText("Target Scene", targetBuf, sizeof(targetBuf))) {
+                        sw.TargetScene = targetBuf;
+                        sceneMgr.MarkDirty();
+                    }
+                }
+
 
                 ImGui::Separator();
                 ImGui::Text("Transform");
@@ -990,6 +1170,58 @@ int main() {
         scene.OnRender(editorCam.GetCamera());
 
         pipeline.EndScenePass();
+        // ---- Editor Markers (3D models, editor-only) ----
+        if (markerShader && (markerLight || markerSpawn || markerWarp)) {
+            pipeline.BeginOverlayPass();
+
+            glEnable(GL_DEPTH_TEST);     // 3D markers should depth-test
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            Renderer::BeginScene(editorCam.GetCamera());
+
+            auto SubmitModel = [&](const std::shared_ptr<Model>& m, const glm::mat4& xform) {
+                if (!m) return;
+                for (const auto& sm : m->GetSubMeshes()) {
+                    if (!sm.MeshPtr || !sm.MaterialPtr) continue;
+                    Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), xform, 0);
+                }
+                };
+
+            auto& reg = scene.Registry();
+
+            // Light marker
+            {
+                auto view = reg.view<TransformComponent, DirectionalLightComponent>();
+                view.each([&](auto, TransformComponent& tc, DirectionalLightComponent&) {
+                    glm::mat4 xform = tc.GetTransform() * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+                    SubmitModel(markerLight, xform);
+                    });
+            }
+
+            // Spawn marker
+            {
+                auto view = reg.view<TransformComponent, SpawnPointComponent>();
+                view.each([&](auto, TransformComponent& tc, SpawnPointComponent&) {
+                    glm::mat4 xform = tc.GetTransform() * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+                    SubmitModel(markerSpawn, xform);
+                    });
+            }
+
+            // Warp marker
+            {
+                auto view = reg.view<TransformComponent, SceneWarpComponent>();
+                view.each([&](auto, TransformComponent& tc, SceneWarpComponent&) {
+                    glm::mat4 xform = tc.GetTransform() * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+                    SubmitModel(markerWarp, xform);
+                    });
+            }
+
+            Renderer::EndScene();
+
+            glDisable(GL_BLEND);
+            pipeline.EndOverlayPass();
+        }
 
         // Gizmo visuals
         if (selectedEntity && gizmo != GizmoMode::None) {
