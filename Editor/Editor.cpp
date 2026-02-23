@@ -28,6 +28,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <filesystem>
+#include <algorithm>
+
 #include <chrono>
 #include <iostream>
 #include <cmath>
@@ -187,10 +190,54 @@ static void AddCircle(std::vector<GizmoVertex>& out,
     }
 }
 
+static std::string MakeNameFromPath(const std::string& path) {
+    std::filesystem::path p(path);
+    if (p.has_stem()) return p.stem().string();
+    return "Model";
+}
+
+static void BuildAssetLists(std::vector<std::pair<AssetHandle, std::string>>& outModels,
+    std::vector<std::pair<AssetHandle, std::string>>& outShaders)
+{
+    outModels.clear();
+    outShaders.clear();
+
+    auto& assets = AssetManager::Get();
+    const auto& all = assets.Registry().GetAll();
+
+    for (const auto& [id, meta] : all) {
+        if (meta.Type == AssetType::Model) outModels.emplace_back(id, meta.Path);
+        if (meta.Type == AssetType::Shader) outShaders.emplace_back(id, meta.Path);
+    }
+
+    auto byPath = [](auto& a, auto& b) { return a.second < b.second; };
+    std::sort(outModels.begin(), outModels.end(), byPath);
+    std::sort(outShaders.begin(), outShaders.end(), byPath);
+}
+
 static void UpdateWindowTitle(GLFWwindow* native, const std::string& sceneName, bool dirty) {
     std::string title = "Engine3D Editor - " + sceneName;
     if (dirty) title += " *";
     glfwSetWindowTitle(native, title.c_str());
+}
+
+static void ScanModelsOnDisk(const std::string& root, std::vector<std::string>& out) {
+    out.clear();
+    namespace fs = std::filesystem;
+
+    if (!fs::exists(root)) return;
+
+    for (auto& it : fs::recursive_directory_iterator(root)) {
+        if (!it.is_regular_file()) continue;
+
+        auto ext = it.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx") {
+            out.push_back(it.path().generic_string());
+        }
+    }
+    std::sort(out.begin(), out.end());
 }
 
 int main() {
@@ -464,6 +511,135 @@ int main() {
             ImGui::End(); // DockSpace
         }
 
+        // -------- Asset Browser --------
+        static char importModelPathBuf[260] = "Assets/Models/monkey.obj";
+        static int importShaderIndex = 0;
+
+        static std::vector<std::pair<AssetHandle, std::string>> s_ModelAssets;
+        static std::vector<std::pair<AssetHandle, std::string>> s_ShaderAssets;
+        static bool s_AssetListsBuilt = false;
+
+        if (!s_AssetListsBuilt) {
+            BuildAssetLists(s_ModelAssets, s_ShaderAssets);
+            s_AssetListsBuilt = true;
+        }
+
+        ImGui::Begin("Assets");
+
+        // Refresh
+        if (ImGui::Button("Refresh Assets")) {
+            BuildAssetLists(s_ModelAssets, s_ShaderAssets);
+        }
+        ImGui::Separator();
+
+        // Import Model
+        ImGui::Text("Import Model");
+        ImGui::InputText("Model Path", importModelPathBuf, sizeof(importModelPathBuf));
+        // ---- Disk scan (put this in the Assets window) ----
+        static std::vector<std::string> diskModels;
+        static char diskFilter[128] = "";
+
+        if (ImGui::Button("Scan Assets/Models")) {
+            ScanModelsOnDisk("Assets/Models", diskModels);
+        }
+        ImGui::SameLine();
+        ImGui::InputTextWithHint("##DiskFilter", "filter (e.g. wall)", diskFilter, sizeof(diskFilter));
+
+        ImGui::BeginChild("DiskModelsList", ImVec2(0, 140), true);
+        for (auto& p : diskModels) {
+            if (diskFilter[0] != '\0') {
+                std::string lowP = p, lowF = diskFilter;
+                std::transform(lowP.begin(), lowP.end(), lowP.begin(), ::tolower);
+                std::transform(lowF.begin(), lowF.end(), lowF.begin(), ::tolower);
+                if (lowP.find(lowF) == std::string::npos) continue;
+            }
+
+            if (ImGui::Selectable(p.c_str())) {
+                std::snprintf(importModelPathBuf, sizeof(importModelPathBuf), "%s", p.c_str());
+            }
+        }
+        ImGui::EndChild();
+
+        // Shader combo
+        if (s_ShaderAssets.empty()) {
+            ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "No shaders registered. Import a shader first.");
+        }
+        else {
+            if (importShaderIndex < 0) importShaderIndex = 0;
+            if (importShaderIndex >= (int)s_ShaderAssets.size()) importShaderIndex = (int)s_ShaderAssets.size() - 1;
+
+            const char* currentShaderLabel = s_ShaderAssets[importShaderIndex].second.c_str();
+            if (ImGui::BeginCombo("Shader", currentShaderLabel)) {
+                for (int i = 0; i < (int)s_ShaderAssets.size(); i++) {
+                    bool selected = (i == importShaderIndex);
+                    if (ImGui::Selectable(s_ShaderAssets[i].second.c_str(), selected)) {
+                        importShaderIndex = i;
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            if (ImGui::Button("Import + Instantiate")) {
+                std::string modelPath = importModelPathBuf;
+                AssetHandle shaderH = s_ShaderAssets[importShaderIndex].first;
+
+                auto& assets = AssetManager::Get();
+                AssetHandle modelH = assets.LoadModel(modelPath, shaderH);
+
+                // refresh lists (new asset)
+                BuildAssetLists(s_ModelAssets, s_ShaderAssets);
+
+                if (modelH != InvalidAssetHandle) {
+                    std::string name = MakeNameFromPath(modelPath);
+                    Entity e = scene.CreateEntity(name.c_str());
+                    e.AddComponent<MeshRendererComponent>(modelH);
+                    sceneMgr.MarkDirty();
+
+                    // Select it
+                    selectedUUID = e.GetComponent<IDComponent>().ID;
+                    SyncSelection();
+                }
+            }
+        }
+
+        ImGui::Separator();
+
+        // Models list
+        ImGui::Text("Models");
+        for (auto& [h, path] : s_ModelAssets) {
+            // 64-bit safe PushID
+            ImGui::PushID((void*)(uintptr_t)h);
+
+            ImGui::TextUnformatted(path.c_str());
+            ImGui::SameLine();
+
+            if (ImGui::Button("Instantiate##ModelInstantiate")) {
+                std::string name = MakeNameFromPath(path);
+                Entity e = scene.CreateEntity(name.c_str());
+                e.AddComponent<MeshRendererComponent>(h);
+                sceneMgr.MarkDirty();
+
+                selectedUUID = e.GetComponent<IDComponent>().ID;
+                SyncSelection();
+            }
+
+            // Drag source for viewport drop
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                ImGui::Text("Model: %s", path.c_str());
+                AssetHandle payload = h;
+                ImGui::SetDragDropPayload("ASSET_MODEL_HANDLE", &payload, sizeof(AssetHandle));
+                ImGui::EndDragDropSource();
+            }
+
+            ImGui::PopID();
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Shaders: %d", (int)s_ShaderAssets.size());
+
+        ImGui::End();
+
         // --- Global hotkeys ---
         if (!io.WantCaptureKeyboard) {
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
@@ -543,6 +719,67 @@ int main() {
                 ImGui::Text("Axis: %s", AxisName(axis));
 
                 auto& tr = selectedEntity.GetComponent<TransformComponent>();
+                ImGui::Separator();
+                ImGui::Text("MeshRenderer");
+
+                auto& assets = AssetManager::Get();
+
+                static std::vector<std::string> diskModels;
+                if (ImGui::Button("Scan Assets/Models")) {
+                    ScanModelsOnDisk("Assets/Models", diskModels);
+                }
+
+                for (auto& p : diskModels) {
+                    if (ImGui::Selectable(p.c_str())) {
+                        std::snprintf(importModelPathBuf, sizeof(importModelPathBuf), "%s", p.c_str());
+                    }
+                }
+
+                // Build model list (reuse the same cached list used by Assets panel)
+                if (ImGui::Button("Refresh Model List")) {
+                    BuildAssetLists(s_ModelAssets, s_ShaderAssets);
+                }
+
+                if (selectedEntity.HasComponent<MeshRendererComponent>()) {
+                    auto& mrc = selectedEntity.GetComponent<MeshRendererComponent>();
+
+                    const AssetMetadata* meta = assets.Registry().Get(mrc.Model);
+                    const char* currentLabel = meta ? meta->Path.c_str() : "<None>";
+
+                    if (ImGui::BeginCombo("Model", currentLabel)) {
+                        // None option
+                        {
+                            bool sel = (mrc.Model == InvalidAssetHandle);
+                            if (ImGui::Selectable("<None>", sel)) {
+                                mrc.Model = InvalidAssetHandle;
+                                sceneMgr.MarkDirty();
+                            }
+                        }
+
+                        for (auto& [h, path] : s_ModelAssets) {
+                            bool sel = (h == mrc.Model);
+                            if (ImGui::Selectable(path.c_str(), sel)) {
+                                mrc.Model = h;
+                                sceneMgr.MarkDirty();
+                            }
+                            if (sel) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+
+                    if (ImGui::Button("Remove MeshRenderer")) {
+                        selectedEntity.RemoveComponent<MeshRendererComponent>();
+                        sceneMgr.MarkDirty();
+                    }
+                }
+                else {
+                    if (ImGui::Button("Add MeshRenderer")) {
+                        if (!s_ModelAssets.empty()) {
+                            selectedEntity.AddComponent<MeshRendererComponent>(s_ModelAssets[0].first);
+                            sceneMgr.MarkDirty();
+                        }
+                    }
+                }
 
                 ImGui::Separator();
                 ImGui::Text("Transform");
@@ -722,6 +959,27 @@ int main() {
 
         ImTextureID tex = (ImTextureID)(intptr_t)pipeline.GetCompositeTexture();
         ImGui::Image(tex, vpSize, ImVec2(0, 1), ImVec2(1, 0));
+        // Accept model drop onto viewport -> instantiate entity
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("ASSET_MODEL_HANDLE")) {
+                if (p->DataSize == sizeof(AssetHandle)) {
+                    AssetHandle modelH = *(const AssetHandle*)p->Data;
+                    if (modelH != InvalidAssetHandle) {
+                        auto& assets = AssetManager::Get();
+                        const AssetMetadata* meta = assets.Registry().Get(modelH);
+
+                        std::string name = meta ? MakeNameFromPath(meta->Path) : "Model";
+                        Entity e = scene.CreateEntity(name.c_str());
+                        e.AddComponent<MeshRendererComponent>(modelH);
+                        sceneMgr.MarkDirty();
+
+                        selectedUUID = e.GetComponent<IDComponent>().ID;
+                        SyncSelection();
+                    }
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
 
         bool imageHovered = ImGui::IsItemHovered();
         ImVec2 imgMin = ImGui::GetItemRectMin();

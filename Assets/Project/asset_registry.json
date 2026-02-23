@@ -1,7 +1,8 @@
 {
-  "nextID": 3,
+  "nextID": 4,
   "assets": [
     { "id": 1, "type": "Shader", "path": "Assets/Shaders/Lit.glsl" },
-    { "id": 2, "type": "Model", "path": "Assets/Models/monkey.obj", "shader": 1 }
+    { "id": 2, "type": "Model", "path": "Assets/Models/Wall/wall.gltf", "shader": 1 },
+    { "id": 3, "type": "Model", "path": "Assets/Models/monkey.obj", "shader": 1 }
   ]
 }

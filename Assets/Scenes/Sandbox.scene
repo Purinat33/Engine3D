@@ -1,10 +1,35 @@
 {
   "Entities": [
     {
-      "ID": 9225036926284089202,
+      "ID": 270982728446243797,
       "MeshRenderer": {
-        "ModelPath": "Assets\\Models\\monkey.obj",
-        "ShaderPath": "Assets\\Shaders\\Lit.glsl"
+        "ModelPath": "Assets/Models/Wall/wall.gltf",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      },
+      "Tag": "wall",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          4.6479997634887695,
+          1.6159999370574951,
+          0.8100000023841858
+        ],
+        "Translation": [
+          -0.18172870576381683,
+          1.747279405593872,
+          -2.4762141704559326
+        ]
+      }
+    },
+    {
+      "ID": 1280582943552269028,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/monkey.obj",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
       },
       "Tag": "Monkey Copy",
       "Transform": {
@@ -19,8 +44,33 @@
           1.0
         ],
         "Translation": [
+          -3.415921926498413,
           0.0,
-          2.1298422813415527,
+          0.0
+        ]
+      }
+    },
+    {
+      "ID": 4409978750725164539,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/monkey.obj",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      },
+      "Tag": "Monkey",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Translation": [
+          0.0,
+          0.0,
           0.0
         ]
       }
@@ -59,35 +109,10 @@
       }
     },
     {
-      "ID": 4409978750725164539,
+      "ID": 9225036926284089202,
       "MeshRenderer": {
-        "ModelPath": "Assets\\Models\\monkey.obj",
-        "ShaderPath": "Assets\\Shaders\\Lit.glsl"
-      },
-      "Tag": "Monkey",
-      "Transform": {
-        "Rotation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "Scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "Translation": [
-          0.0,
-          0.0,
-          0.0
-        ]
-      }
-    },
-    {
-      "ID": 1280582943552269028,
-      "MeshRenderer": {
-        "ModelPath": "Assets\\Models\\monkey.obj",
-        "ShaderPath": "Assets\\Shaders\\Lit.glsl"
+        "ModelPath": "Assets/Models/monkey.obj",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
       },
       "Tag": "Monkey Copy",
       "Transform": {
@@ -102,33 +127,8 @@
           1.0
         ],
         "Translation": [
-          -3.415921926498413,
           0.0,
-          0.0
-        ]
-      }
-    },
-    {
-      "ID": 11243937171332847928,
-      "MeshRenderer": {
-        "ModelPath": "Assets\\Models\\monkey.obj",
-        "ShaderPath": "Assets\\Shaders\\Lit.glsl"
-      },
-      "Tag": "Monkey Copy Copy",
-      "Transform": {
-        "Rotation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "Scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "Translation": [
-          3.7453763484954834,
-          0.0,
+          2.1298422813415527,
           0.0
         ]
       }
