@@ -6,6 +6,7 @@
 #include <Engine/Scene/Scene.h>
 #include <Engine/Scene/Components.h>
 #include <Engine/Scene/SceneSerializer.h>
+#include <Engine/Scene/UUID.h>
 
 #include <Engine/Assets/AssetManager.h>
 
@@ -13,6 +14,8 @@
 #include <Engine/Renderer/Material.h>
 #include <Engine/Renderer/VertexArray.h>
 #include <Engine/Renderer/Buffer.h>
+
+#include "CommandStack.h"
 
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
@@ -44,18 +47,17 @@ static const char* AxisName(AxisConstraint a) {
     }
 }
 
-static glm::vec3 AxisToVec(AxisConstraint a) {
-    switch (a) {
-    case AxisConstraint::X: return { 1,0,0 };
-    case AxisConstraint::Y: return { 0,1,0 };
-    case AxisConstraint::Z: return { 0,0,1 };
-    default: return { 0,0,0 };
-    }
+static float SnapFloat(float v, float step) {
+    if (step <= 0.0f) return v;
+    return std::round(v / step) * step;
 }
 
-static constexpr float kTranslateSense = 0.0020f;
-static constexpr float kRotateSense = 0.0100f;
-static constexpr float kScaleSense = 0.0100f;
+static uint32_t FoldUUIDToPickID(UUID id) {
+    uint32_t v = (uint32_t)(id ^ (id >> 32));
+    return v == 0 ? 1u : v;
+}
+
+// ---------------- Grid ----------------
 
 static std::shared_ptr<VertexArray> CreateGridPlaneVAO(float halfSize) {
     float v[] = {
@@ -76,17 +78,7 @@ static std::shared_ptr<VertexArray> CreateGridPlaneVAO(float halfSize) {
     return vao;
 }
 
-static uint32_t FoldUUIDToPickID(UUID id) {
-    uint32_t v = (uint32_t)(id ^ (id >> 32));
-    return v == 0 ? 1u : v;
-}
-
-static float SnapFloat(float v, float step) {
-    if (step <= 0.0f) return v;
-    return std::round(v / step) * step;
-}
-
-// ---------------- Gizmo line renderer (Editor-only) ----------------
+// ---------------- Gizmo Lines (Editor-only) ----------------
 
 struct GizmoVertex {
     glm::vec3 Pos;
@@ -95,22 +87,18 @@ struct GizmoVertex {
 
 struct GizmoRenderer {
     GLuint VAO = 0, VBO = 0;
-    std::shared_ptr<Shader> GizmoShader;
+    std::shared_ptr<Shader> ShaderLine;
     bool Initialized = false;
 
     void Init() {
         if (Initialized) return;
-
-        // Needs file: Assets/Shaders/GizmoLine.shader
-        GizmoShader = std::make_shared<Shader>("Assets/Shaders/GizmoLine.shader");
+        ShaderLine = std::make_shared<Shader>("Assets/Shaders/GizmoLine.shader");
 
         glGenVertexArrays(1, &VAO);
         glBindVertexArray(VAO);
 
         glGenBuffers(1, &VBO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-        // enough for a bunch of lines
         glBufferData(GL_ARRAY_BUFFER, 1024 * 1024, nullptr, GL_DYNAMIC_DRAW);
 
         glEnableVertexAttribArray(0);
@@ -126,9 +114,9 @@ struct GizmoRenderer {
     void Draw(const PerspectiveCamera& cam, const std::vector<GizmoVertex>& verts, float opacity = 1.0f) {
         if (!Initialized || verts.empty()) return;
 
-        GizmoShader->Bind();
-        GizmoShader->SetMat4("u_ViewProjection", glm::value_ptr(cam.GetViewProjection()));
-        GizmoShader->SetFloat("u_Opacity", opacity);
+        ShaderLine->Bind();
+        ShaderLine->SetMat4("u_ViewProjection", glm::value_ptr(cam.GetViewProjection()));
+        ShaderLine->SetFloat("u_Opacity", opacity);
 
         glBindVertexArray(VAO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -146,9 +134,11 @@ static void AddLine(std::vector<GizmoVertex>& out, const glm::vec3& a, const glm
     out.push_back({ b, c });
 }
 
-static void AddArrow(std::vector<GizmoVertex>& out, const glm::vec3& base, const glm::vec3& dir,
-    const glm::vec3& color, float len, float headLen, float headWidth) {
-
+static void AddArrow(std::vector<GizmoVertex>& out,
+    const glm::vec3& base, const glm::vec3& dir,
+    const glm::vec3& color,
+    float len, float headLen, float headWidth)
+{
     glm::vec3 d = glm::normalize(dir);
     glm::vec3 end = base + d * len;
     AddLine(out, base, end, color);
@@ -163,9 +153,10 @@ static void AddArrow(std::vector<GizmoVertex>& out, const glm::vec3& base, const
     AddLine(out, end, headB, color);
 }
 
-static void AddBox(std::vector<GizmoVertex>& out, const glm::vec3& center, const glm::vec3& u, const glm::vec3& v,
-    const glm::vec3& color, float size) {
-
+static void AddBox(std::vector<GizmoVertex>& out,
+    const glm::vec3& center, const glm::vec3& u, const glm::vec3& v,
+    const glm::vec3& color, float size)
+{
     glm::vec3 uu = glm::normalize(u);
     glm::vec3 vv = glm::normalize(v);
 
@@ -180,9 +171,10 @@ static void AddBox(std::vector<GizmoVertex>& out, const glm::vec3& center, const
     AddLine(out, d, a, color);
 }
 
-static void AddCircle(std::vector<GizmoVertex>& out, const glm::vec3& center,
-    const glm::vec3& axis, const glm::vec3& color, float radius, int segments = 64) {
-
+static void AddCircle(std::vector<GizmoVertex>& out,
+    const glm::vec3& center, const glm::vec3& axis,
+    const glm::vec3& color, float radius, int segments = 64)
+{
     glm::vec3 n = glm::normalize(axis);
     glm::vec3 tmp = (std::abs(n.y) < 0.99f) ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
     glm::vec3 u = glm::normalize(glm::cross(n, tmp));
@@ -199,156 +191,23 @@ static void AddCircle(std::vector<GizmoVertex>& out, const glm::vec3& center,
     }
 }
 
-struct GizmoMesh {
-    GLuint VAO = 0, VBO = 0, EBO = 0;
-    GLsizei Count = 0;
-    GLenum Mode = GL_TRIANGLES;
-    bool Indexed = true;
-};
-
-static GizmoMesh MakeIndexedMesh(const std::vector<glm::vec3>& verts,
-    const std::vector<uint32_t>& idx,
-    GLenum mode)
-{
-    GizmoMesh m;
-    m.Mode = mode;
-    m.Indexed = true;
-    m.Count = (GLsizei)idx.size();
-
-    glGenVertexArrays(1, &m.VAO);
-    glGenBuffers(1, &m.VBO);
-    glGenBuffers(1, &m.EBO);
-
-    glBindVertexArray(m.VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m.VBO);
-    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(glm::vec3), verts.data(), GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(uint32_t), idx.data(), GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
-
-    glBindVertexArray(0);
-    return m;
-}
-
-static GizmoMesh MakeNonIndexedMesh(const std::vector<glm::vec3>& verts, GLenum mode)
-{
-    GizmoMesh m;
-    m.Mode = mode;
-    m.Indexed = false;
-    m.Count = (GLsizei)verts.size();
-
-    glGenVertexArrays(1, &m.VAO);
-    glGenBuffers(1, &m.VBO);
-
-    glBindVertexArray(m.VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, m.VBO);
-    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(glm::vec3), verts.data(), GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
-
-    glBindVertexArray(0);
-    return m;
-}
-
-static void DrawMesh(const GizmoMesh& m) {
-    glBindVertexArray(m.VAO);
-    if (m.Indexed) glDrawElements(m.Mode, m.Count, GL_UNSIGNED_INT, nullptr);
-    else glDrawArrays(m.Mode, 0, m.Count);
-    glBindVertexArray(0);
-}
-
-// Geometry builders
-static GizmoMesh BuildUnitLineX() {
-    std::vector<glm::vec3> v = { {0,0,0}, {1,0,0} };
-    std::vector<uint32_t> i = { 0, 1 };
-    return MakeIndexedMesh(v, i, GL_LINES);
-}
-
-static GizmoMesh BuildConeZ(int segments = 16) {
-    // Tip at (0,0,1), base circle at z=0.75 radius=0.06
-    std::vector<glm::vec3> v;
-    std::vector<uint32_t> idx;
-
-    const float baseZ = 0.75f;
-    const float r = 0.06f;
-
-    uint32_t tip = 0;
-    v.push_back({ 0,0,1 });
-
-    // base ring
-    for (int s = 0; s < segments; s++) {
-        float a = (float)s / (float)segments * 6.2831853f;
-        v.push_back({ std::cos(a) * r, std::sin(a) * r, baseZ });
-    }
-
-    // side triangles
-    for (int s = 0; s < segments; s++) {
-        uint32_t a = 1 + s;
-        uint32_t b = 1 + ((s + 1) % segments);
-        idx.push_back(tip);
-        idx.push_back(a);
-        idx.push_back(b);
-    }
-
-    return MakeIndexedMesh(v, idx, GL_TRIANGLES);
-}
-
-static GizmoMesh BuildCube(float half = 0.06f) {
-    // Cube centered at origin
-    std::vector<glm::vec3> v = {
-        {-half,-half,-half}, { half,-half,-half}, { half, half,-half}, {-half, half,-half},
-        {-half,-half, half}, { half,-half, half}, { half, half, half}, {-half, half, half},
-    };
-    std::vector<uint32_t> i = {
-        0,1,2, 2,3,0, // back
-        4,5,6, 6,7,4, // front
-        0,4,7, 7,3,0, // left
-        1,5,6, 6,2,1, // right
-        3,2,6, 6,7,3, // top
-        0,1,5, 5,4,0  // bottom
-    };
-    return MakeIndexedMesh(v, i, GL_TRIANGLES);
-}
-
-static GizmoMesh BuildCircleXZ(int segments = 64) {
-    std::vector<glm::vec3> v;
-    v.reserve(segments);
-    for (int s = 0; s < segments; s++) {
-        float a = (float)s / (float)segments * 6.2831853f;
-        v.push_back({ std::cos(a), 0.0f, std::sin(a) });
-    }
-    return MakeNonIndexedMesh(v, GL_LINE_LOOP);
-}
-
-// ---------------- Main ----------------
-
 int main() {
     auto window = Window::Create({ "Engine3D Editor (ImGui)", 1600, 900 });
     GLFWwindow* native = (GLFWwindow*)window->GetNativeWindow();
 
     Renderer::Init();
 
-    // Axis constraint + gizmo renderer (needs GL ready -> after Renderer::Init())
-    AxisConstraint axis = AxisConstraint::None;
-    GizmoRenderer gizmoRenderer;
-    gizmoRenderer.Init();
-
-    // --- ImGui init ---
+    // ImGui init
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(native, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-    // --- Scene ---
+    // Scene load/create
     Scene scene;
     SceneSerializer serializer(scene);
     const std::string scenePath = "Assets/Scenes/Sandbox.scene";
@@ -364,12 +223,12 @@ int main() {
         auto sun = scene.CreateEntity("SunLight");
         auto& dl = sun.AddComponent<DirectionalLightComponent>();
         dl.Direction = glm::vec3(0.4f, 0.8f, -0.3f);
-        dl.Color = glm::vec3(1.0f, 1.0f, 1.0f);
+        dl.Color = glm::vec3(1.0f);
 
         serializer.Serialize(scenePath);
     }
 
-    // --- Pipeline + camera ---
+    // Pipeline + camera
     RendererPipeline pipeline;
 
     CameraController editorCam(1.0472f, 1600.0f / 900.0f, 0.1f, 300.0f);
@@ -381,10 +240,18 @@ int main() {
     gridMat->SetTwoSided(true);
     auto gridVAO = CreateGridPlaneVAO(100.0f);
 
-    // Editor state
-    uint32_t selectedID = 0;
+    // Gizmo renderer
+    GizmoRenderer gizmoRenderer;
+    gizmoRenderer.Init();
+
+    // -------- E6 State --------
+    EditorUndo::CommandStack cmdStack;
+    UUID selectedUUID = 0;          // stable selection
+    uint32_t selectedPickID = 0;    // outline ID
     Entity selectedEntity{};
+
     GizmoMode gizmo = GizmoMode::None;
+    AxisConstraint axis = AxisConstraint::None;
 
     bool dragging = false;
     float dragStartX = 0.f, dragStartY = 0.f;
@@ -392,40 +259,64 @@ int main() {
     glm::vec3 dragStartRotation{ 0.f };
     glm::vec3 dragStartScale{ 1.f };
 
-    auto gizmoShader = std::make_shared<Shader>("Assets/Shaders/Gizmo.shader");
+    auto ClearSelection = [&]() {
+        selectedUUID = 0;
+        selectedPickID = 0;
+        selectedEntity = {};
+        pipeline.SetSelectedID(0);
+        axis = AxisConstraint::None;
+        gizmo = GizmoMode::None;
+        dragging = false;
+        };
 
-    GizmoMesh lineX = BuildUnitLineX();
-    GizmoMesh coneZ = BuildConeZ();
-    GizmoMesh cube = BuildCube();
-    GizmoMesh ring = BuildCircleXZ();
+    auto SyncSelection = [&]() {
+        if (selectedUUID == 0) { ClearSelection(); return; }
+        Entity e = scene.FindEntityByUUID(selectedUUID);
+        if (!e) { ClearSelection(); return; }
+        selectedEntity = e;
+        selectedPickID = FoldUUIDToPickID(selectedUUID);
+        pipeline.SetSelectedID(selectedPickID);
+        };
 
-    // Viewport info
-    ImVec2 viewportPos{ 0,0 };
-    ImVec2 viewportSize{ 1,1 };
-    bool viewportFocused = false;
+    auto SelectByUUID = [&](UUID id) {
+        selectedUUID = id;
+        SyncSelection();
+        };
 
+    auto SelectByPickID = [&](uint32_t pid) {
+        if (pid == 0) { ClearSelection(); return; }
+        Entity e = scene.FindEntityByPickID(pid);
+        if (!e) { ClearSelection(); return; }
+        selectedUUID = e.GetComponent<IDComponent>().ID;
+        SyncSelection();
+        };
+
+    // Timing
     auto last = std::chrono::high_resolution_clock::now();
+
+    // Inspector undo snapshot
+    static EditorUndo::TransformSnapshot inspectorBefore{};
 
     while (!window->ShouldClose()) {
         glfwPollEvents();
 
-        // Timing
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration<float>(now - last).count();
         last = now;
 
-        // --- Begin ImGui frame ---
+        // Begin ImGui
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // --- Dockspace ---
+        // Dockspace
         {
             ImGuiWindowFlags dockFlags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
             const ImGuiViewport* mainVp = ImGui::GetMainViewport();
             ImGui::SetNextWindowPos(mainVp->Pos);
             ImGui::SetNextWindowSize(mainVp->Size);
             ImGui::SetNextWindowViewport(mainVp->ID);
+
             dockFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
             dockFlags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
@@ -440,15 +331,13 @@ int main() {
             if (ImGui::BeginMenuBar()) {
                 if (ImGui::BeginMenu("File")) {
                     if (ImGui::MenuItem("Save", "Ctrl+S")) serializer.Serialize(scenePath);
+
                     if (ImGui::MenuItem("Reload", "Ctrl+R")) {
                         serializer.Deserialize(scenePath);
-                        selectedID = 0;
-                        selectedEntity = {};
-                        pipeline.SetSelectedID(0);
-                        gizmo = GizmoMode::None;
-                        dragging = false;
-                        axis = AxisConstraint::None;
+                        cmdStack.Clear();
+                        ClearSelection();
                     }
+
                     if (ImGui::MenuItem("Exit")) glfwSetWindowShouldClose(native, 1);
                     ImGui::EndMenu();
                 }
@@ -458,62 +347,87 @@ int main() {
             ImGui::End();
         }
 
-        // --- Hierarchy ---
+        // Undo/Redo hotkeys (global)
+        if (!io.WantCaptureKeyboard) {
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+                cmdStack.Undo(scene);
+                SyncSelection();
+            }
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) {
+                cmdStack.Redo(scene);
+                SyncSelection();
+            }
+        }
+
+        // Hierarchy
         {
             ImGui::Begin("Hierarchy");
             auto view = scene.Registry().view<IDComponent, TagComponent>();
             view.each([&](auto, IDComponent& idc, TagComponent& tc) {
                 uint32_t pid = FoldUUIDToPickID(idc.ID);
-                bool selected = (pid == selectedID);
+                bool selected = (selectedPickID == pid);
 
                 if (ImGui::Selectable(tc.Tag.c_str(), selected)) {
-                    selectedID = pid;
-                    pipeline.SetSelectedID(selectedID);
-                    selectedEntity = scene.FindEntityByPickID(selectedID);
+                    SelectByUUID(idc.ID);
                 }
                 });
 
             if (ImGui::Button("Clear Selection")) {
-                selectedID = 0;
-                selectedEntity = {};
-                pipeline.SetSelectedID(0);
-                gizmo = GizmoMode::None;
-                dragging = false;
-                axis = AxisConstraint::None;
+                ClearSelection();
             }
             ImGui::End();
         }
 
-        // --- Inspector ---
+        // Inspector
         {
             ImGui::Begin("Inspector");
             if (selectedEntity) {
                 auto& tag = selectedEntity.GetComponent<TagComponent>().Tag;
                 ImGui::Text("Entity: %s", tag.c_str());
-                ImGui::Text("PickID: %u", selectedID);
-                ImGui::Text("Axis: %s",
-                    axis == AxisConstraint::X ? "X" :
-                    axis == AxisConstraint::Y ? "Y" :
-                    axis == AxisConstraint::Z ? "Z" : "None");
+                ImGui::Text("UUID: %llu", (unsigned long long)selectedUUID);
+                ImGui::Text("Axis: %s", AxisName(axis));
 
                 auto& tr = selectedEntity.GetComponent<TransformComponent>();
 
                 ImGui::Separator();
                 ImGui::Text("Transform");
-                ImGui::DragFloat3("Translation", &tr.Translation.x, 0.05f);
 
+                // Translation
+                ImGui::DragFloat3("Translation", &tr.Translation.x, 0.05f);
+                if (ImGui::IsItemActivated()) inspectorBefore = EditorUndo::CaptureTransform(selectedEntity);
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    auto after = EditorUndo::CaptureTransform(selectedEntity);
+                    if (!EditorUndo::TransformEqual(inspectorBefore, after))
+                        cmdStack.Commit(std::make_unique<EditorUndo::TransformCommand>(selectedUUID, inspectorBefore, after));
+                }
+
+                // Rotation (degrees UI)
                 float rotDeg[3] = {
                     tr.Rotation.x * 57.29578f,
                     tr.Rotation.y * 57.29578f,
                     tr.Rotation.z * 57.29578f
                 };
-                if (ImGui::DragFloat3("Rotation (deg)", rotDeg, 0.5f)) {
+                bool rotChanged = ImGui::DragFloat3("Rotation (deg)", rotDeg, 0.5f);
+                if (rotChanged) {
                     tr.Rotation.x = rotDeg[0] * 0.01745329f;
                     tr.Rotation.y = rotDeg[1] * 0.01745329f;
                     tr.Rotation.z = rotDeg[2] * 0.01745329f;
                 }
+                if (ImGui::IsItemActivated()) inspectorBefore = EditorUndo::CaptureTransform(selectedEntity);
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    auto after = EditorUndo::CaptureTransform(selectedEntity);
+                    if (!EditorUndo::TransformEqual(inspectorBefore, after))
+                        cmdStack.Commit(std::make_unique<EditorUndo::TransformCommand>(selectedUUID, inspectorBefore, after));
+                }
 
+                // Scale
                 ImGui::DragFloat3("Scale", &tr.Scale.x, 0.02f);
+                if (ImGui::IsItemActivated()) inspectorBefore = EditorUndo::CaptureTransform(selectedEntity);
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    auto after = EditorUndo::CaptureTransform(selectedEntity);
+                    if (!EditorUndo::TransformEqual(inspectorBefore, after))
+                        cmdStack.Commit(std::make_unique<EditorUndo::TransformCommand>(selectedUUID, inspectorBefore, after));
+                }
 
                 ImGui::Separator();
                 ImGui::Text("Gizmo");
@@ -523,7 +437,8 @@ int main() {
                 ImGui::SameLine();
                 if (ImGui::Button("Scale (F)")) gizmo = GizmoMode::Scale;
                 if (ImGui::Button("None (Esc)")) { gizmo = GizmoMode::None; dragging = false; }
-                ImGui::Text("Hold Ctrl = snap. X/Y/Z = axis constraint.");
+
+                ImGui::Text("Ctrl = snap | X/Y/Z = axis constraint");
             }
             else {
                 ImGui::Text("No selection.");
@@ -531,10 +446,10 @@ int main() {
             ImGui::End();
         }
 
-        // --- Viewport ---
+        // Viewport
         ImGui::Begin("Viewport");
 
-        // 1) Define the viewport *rect* once (this is stable)
+        // Stable viewport rect
         ImVec2 vpMin = ImGui::GetCursorScreenPos();
         ImVec2 vpSize = ImGui::GetContentRegionAvail();
         if (vpSize.x < 1) vpSize.x = 1;
@@ -544,8 +459,9 @@ int main() {
         uint32_t vw = (uint32_t)vpSize.x;
         uint32_t vh = (uint32_t)vpSize.y;
 
-        // 2) Hotkeys only when viewport focused
         bool viewportFocused = ImGui::IsWindowFocused();
+
+        // Viewport hotkeys
         if (viewportFocused && !io.WantCaptureKeyboard) {
             if (ImGui::IsKeyPressed(ImGuiKey_G) && selectedEntity) gizmo = GizmoMode::Translate;
             if (ImGui::IsKeyPressed(ImGuiKey_R) && selectedEntity) gizmo = GizmoMode::Rotate;
@@ -555,18 +471,32 @@ int main() {
             if (ImGui::IsKeyPressed(ImGuiKey_X)) axis = (axis == AxisConstraint::X) ? AxisConstraint::None : AxisConstraint::X;
             if (ImGui::IsKeyPressed(ImGuiKey_Y)) axis = (axis == AxisConstraint::Y) ? AxisConstraint::None : AxisConstraint::Y;
             if (ImGui::IsKeyPressed(ImGuiKey_Z)) axis = (axis == AxisConstraint::Z) ? AxisConstraint::None : AxisConstraint::Z;
+
+            // Delete
+            if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedEntity) {
+                auto snap = EditorUndo::CaptureEntity(selectedEntity);
+                cmdStack.Execute(scene, std::make_unique<EditorUndo::DeleteEntityCommand>(snap));
+                ClearSelection();
+            }
+
+            // Duplicate
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedEntity) {
+                UUID newID = GenerateUUID();
+                auto snap = EditorUndo::MakeDuplicateSnapshot(scene, selectedEntity, newID);
+                cmdStack.Execute(scene, std::make_unique<EditorUndo::CreateEntityCommand>(snap));
+                SelectByUUID(newID);
+            }
         }
 
-        // 3) Camera control based on viewport RECT (not imageHovered)
+        // Camera control: viewport rect hover + RMB
         bool viewportRectHovered = ImGui::IsMouseHoveringRect(vpMin, vpMax, false);
         bool cameraControl = viewportRectHovered && ImGui::IsMouseDown(ImGuiMouseButton_Right);
 
         editorCam.SetActive(cameraControl);
         editorCam.OnUpdate(dt);
-        glfwSetInputMode(native, GLFW_CURSOR,
-            cameraControl ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        glfwSetInputMode(native, GLFW_CURSOR, cameraControl ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 
-        // 4) Render passes (use updated camera)
+        // Render passes
         pipeline.BeginPickingPass(vw, vh, editorCam.GetCamera());
         scene.OnRenderPicking(editorCam.GetCamera(), pipeline.GetIDMaterial());
         pipeline.EndPickingPass();
@@ -586,16 +516,58 @@ int main() {
 
         pipeline.EndScenePass();
 
-        // Draw gizmos into scene FB here if you want (your existing code is fine)
+        // Draw simple gizmo indicator lines (optional)
+        if (selectedEntity && gizmo != GizmoMode::None) {
+            std::vector<GizmoVertex> verts;
+            verts.reserve(2048);
+
+            glm::vec3 p = selectedEntity.GetComponent<TransformComponent>().Translation;
+            float dist = glm::length(p - editorCam.GetPosition());
+            if (dist < 1.0f) dist = 1.0f;
+            float g = std::max(0.8f, dist * 0.15f);
+
+            glm::vec3 colX = (axis == AxisConstraint::X) ? glm::vec3(1, 1, 0) : glm::vec3(1, 0.2f, 0.2f);
+            glm::vec3 colY = (axis == AxisConstraint::Y) ? glm::vec3(1, 1, 0) : glm::vec3(0.2f, 1, 0.2f);
+            glm::vec3 colZ = (axis == AxisConstraint::Z) ? glm::vec3(1, 1, 0) : glm::vec3(0.2f, 0.6f, 1);
+
+            if (gizmo == GizmoMode::Translate) {
+                AddArrow(verts, p, { 1,0,0 }, colX, g, g * 0.18f, g * 0.07f);
+                AddArrow(verts, p, { 0,1,0 }, colY, g, g * 0.18f, g * 0.07f);
+                AddArrow(verts, p, { 0,0,1 }, colZ, g, g * 0.18f, g * 0.07f);
+            }
+            else if (gizmo == GizmoMode::Rotate) {
+                AddCircle(verts, p, { 1,0,0 }, colX, g * 0.85f, 64);
+                AddCircle(verts, p, { 0,1,0 }, colY, g * 0.85f, 64);
+                AddCircle(verts, p, { 0,0,1 }, colZ, g * 0.85f, 64);
+            }
+            else if (gizmo == GizmoMode::Scale) {
+                AddLine(verts, p, p + glm::vec3(g, 0, 0), colX);
+                AddLine(verts, p, p + glm::vec3(0, g, 0), colY);
+                AddLine(verts, p, p + glm::vec3(0, 0, g), colZ);
+
+                AddBox(verts, p + glm::vec3(g, 0, 0), { 0,1,0 }, { 0,0,1 }, colX, g * 0.05f);
+                AddBox(verts, p + glm::vec3(0, g, 0), { 1,0,0 }, { 0,0,1 }, colY, g * 0.05f);
+                AddBox(verts, p + glm::vec3(0, 0, g), { 1,0,0 }, { 0,1,0 }, colZ, g * 0.05f);
+            }
+
+            glDisable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            gizmoRenderer.Draw(editorCam.GetCamera(), verts, 1.0f);
+
+            glEnable(GL_DEPTH_TEST);
+        }
 
         pipeline.Compose();
 
-        // 5) Show composite texture
+        // Present to ImGui
         ImTextureID tex = (ImTextureID)(intptr_t)pipeline.GetCompositeTexture();
         ImGui::Image(tex, vpSize, ImVec2(0, 1), ImVec2(1, 0));
 
-        // 6) Now (and ONLY now) compute image hover + mouse coords relative to image
         bool imageHovered = ImGui::IsItemHovered();
+
+        // Image rect for proper mouse coords
         ImVec2 imgMin = ImGui::GetItemRectMin();
         ImVec2 imgMax = ImGui::GetItemRectMax();
         ImVec2 imgSize = ImVec2(imgMax.x - imgMin.x, imgMax.y - imgMin.y);
@@ -611,7 +583,7 @@ int main() {
 
         bool ctrlDown = io.KeyCtrl;
 
-        // 7) Click selection / start drag (don’t start if cameraControl is active)
+        // Start drag / pick (ignore while flying camera)
         if (!cameraControl && imageHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             if (gizmo != GizmoMode::None && selectedEntity) {
                 dragging = true;
@@ -624,18 +596,12 @@ int main() {
                 dragStartScale = tc.Scale;
             }
             else {
-                uint32_t id = pipeline.ReadPickingID((uint32_t)mx, (uint32_t)my);
-                selectedID = id;
-                pipeline.SetSelectedID(selectedID);
-                selectedEntity = (selectedID == 0) ? Entity{} : scene.FindEntityByPickID(selectedID);
-                if (selectedID == 0) axis = AxisConstraint::None;
+                uint32_t pid = pipeline.ReadPickingID((uint32_t)mx, (uint32_t)my);
+                SelectByPickID(pid);
             }
         }
 
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-            dragging = false;
-
-        // Dragging applies transform with axis constraints
+        // Dragging transform (axis constraints)
         if (!cameraControl && dragging && gizmo != GizmoMode::None && selectedEntity) {
             float dx = mx - dragStartX;
             float dy = my - dragStartY;
@@ -650,20 +616,13 @@ int main() {
             if (dist < 1.0f) dist = 1.0f;
 
             if (gizmo == GizmoMode::Translate) {
-                glm::vec3 camRight = editorCam.GetRight();
-                glm::vec3 camFwd = editorCam.GetForward();
-                glm::vec3 camUp = glm::normalize(glm::cross(camRight, camFwd));
-
-                float dist = glm::length(dragStartTranslation - editorCam.GetPosition());
-                if (dist < 1.0f) dist = 1.0f;
                 float scale = 0.0020f * dist;
 
                 glm::vec3 out = dragStartTranslation;
 
                 if (axis == AxisConstraint::None) {
-                    // existing XZ plane feel (camera-relative)
                     glm::vec3 right = camRight; right.y = 0.f;
-                    glm::vec3 fwd = camFwd;   fwd.y = 0.f;
+                    glm::vec3 fwd = camFwd;     fwd.y = 0.f;
                     float rl = glm::length(right); if (rl > 0.0001f) right /= rl;
                     float fl = glm::length(fwd);   if (fl > 0.0001f) fwd /= fl;
 
@@ -681,7 +640,6 @@ int main() {
                         : (axis == AxisConstraint::Y) ? glm::vec3(0, 1, 0)
                         : glm::vec3(0, 0, 1);
 
-                    // project mouse motion onto axis using camera basis
                     glm::vec3 dragVec = camRight * dx + camUp * (-dy);
                     float amt = glm::dot(dragVec, A) * scale;
                     out = dragStartTranslation + A * amt;
@@ -697,13 +655,10 @@ int main() {
                 tc.Translation = out;
             }
             else if (gizmo == GizmoMode::Rotate) {
-                float speed = 0.01f;
-                float delta = dx * speed;
-
+                float delta = dx * 0.01f;
                 auto out = dragStartRotation;
 
                 AxisConstraint ax = (axis == AxisConstraint::None) ? AxisConstraint::Y : axis;
-
                 if (ax == AxisConstraint::X) out.x = dragStartRotation.x + delta;
                 if (ax == AxisConstraint::Y) out.y = dragStartRotation.y + delta;
                 if (ax == AxisConstraint::Z) out.z = dragStartRotation.z + delta;
@@ -718,8 +673,7 @@ int main() {
                 tc.Rotation = out;
             }
             else if (gizmo == GizmoMode::Scale) {
-                float speed = 0.01f;
-                float s = 1.0f + (-dy) * speed;
+                float s = 1.0f + (-dy) * 0.01f;
                 if (s < 0.05f) s = 0.05f;
 
                 glm::vec3 out = dragStartScale;
@@ -744,9 +698,25 @@ int main() {
             }
         }
 
+        // Commit transform command when drag ends
+        bool releasedLMB = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+        if (releasedLMB && dragging && selectedEntity) {
+            EditorUndo::TransformSnapshot before{ dragStartTranslation, dragStartRotation, dragStartScale };
+            EditorUndo::TransformSnapshot after = EditorUndo::CaptureTransform(selectedEntity);
+
+            if (!EditorUndo::TransformEqual(before, after)) {
+                cmdStack.Commit(std::make_unique<EditorUndo::TransformCommand>(selectedUUID, before, after));
+            }
+
+            dragging = false;
+        }
+        else if (releasedLMB) {
+            dragging = false;
+        }
+
         ImGui::End(); // Viewport
 
-        // --- End ImGui frame ---
+        // End ImGui + present
         ImGui::Render();
 
         int displayW, displayH;
@@ -759,23 +729,20 @@ int main() {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(native);
 
-        // Global hotkeys
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) serializer.Serialize(scenePath);
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {
-            serializer.Deserialize(scenePath);
-            selectedID = 0;
-            selectedEntity = {};
-            pipeline.SetSelectedID(0);
-            gizmo = GizmoMode::None;
-            dragging = false;
-            axis = AxisConstraint::None;
+        // Global Save/Reload
+        if (!io.WantCaptureKeyboard) {
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) serializer.Serialize(scenePath);
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_R)) {
+                serializer.Deserialize(scenePath);
+                cmdStack.Clear();
+                ClearSelection();
+            }
         }
     }
 
-    // --- ImGui shutdown ---
+    // Shutdown
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-
     return 0;
 }

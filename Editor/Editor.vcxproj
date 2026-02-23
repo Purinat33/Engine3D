@@ -149,6 +149,9 @@
     <None Include="..\Assets\Shaders\Grid.shader" />
     <None Include="..\Assets\Shaders\ID.shader" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CommandStack.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

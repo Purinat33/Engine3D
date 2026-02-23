@@ -22,6 +22,12 @@ namespace Engine {
         }
 
         template<typename T>
+        const T& GetComponent() const {
+            // ensure we call the const overload on registry
+            return static_cast<const entt::registry*>(m_Registry)->get<T>(m_EntityHandle);
+        }
+
+        template<typename T>
         bool HasComponent() const {
             return m_Registry->any_of<T>(m_EntityHandle);
         }
