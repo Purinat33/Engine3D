@@ -48,5 +48,5 @@ void main() {
     vec3 lit = u_Ambient * u_LightColor + ndl * u_LightColor;
 
     vec3 color = (u_UseLighting == 1) ? (albedo * lit) : albedo;
-    FragColor = vec4(color, u_Color.a);
+    FragColor = vec4(clamp(color, 0.0, 1.0), u_Color.a);
 }

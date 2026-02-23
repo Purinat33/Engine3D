@@ -54,7 +54,7 @@ namespace Engine {
             shader->SetInt("u_UseLighting", s_HasDirLight ? 1 : 0);
             shader->SetFloat3("u_LightDir", s_DirLightDir.x, s_DirLightDir.y, s_DirLightDir.z);
             shader->SetFloat3("u_LightColor", s_DirLightColor.x, s_DirLightColor.y, s_DirLightColor.z);
-            shader->SetFloat("u_Ambient", 0.15f);
+            shader->SetFloat("u_Ambient", 0.07f); // Set Light Level
 
             // Default: no texture
             int useTexture0 = 0;

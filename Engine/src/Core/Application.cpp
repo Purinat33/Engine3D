@@ -1,46 +1,26 @@
 #include "pch.h"
 #include "Engine/Core/Application.h"
 
+#include "Engine/Core/Window.h"
+
 #include "Engine/Renderer/Renderer.h"
-#include "Engine/Renderer/RenderCommand.h"
-#include "Engine/Renderer/VertexArray.h"
-#include "Engine/Renderer/Buffer.h"
-#include "Engine/Renderer/PerspectiveCamera.h"
-#include "Engine/Renderer/ShaderLibrary.h"
-#include "Engine/Renderer/Shader.h"       
-#include "Engine/Renderer/Texture2D.h"
-#include "Engine/Renderer/Material.h"
-#include "Engine/Renderer/Model.h"
-#include "Engine/Renderer/CameraController.h"
-
-#include "Engine/Renderer/Framebuffer.h"
-#include "Engine/Renderer/ScreenQuad.h"
-
 #include "Engine/Renderer/RendererPipeline.h"
-
+#include "Engine/Renderer/CameraController.h"
 
 #include "Engine/Scene/Scene.h"
 #include "Engine/Scene/Components.h"
-
-#include "Engine/Assets/AssetManager.h"
-
 #include "Engine/Scene/SceneSerializer.h"
 
 #include "Engine/Events/Event.h"
 #include "Engine/Events/ApplicationEvent.h"
 #include "Engine/Events/WindowFocusEvent.h"
 #include "Engine/Events/KeyEvent.h"
-#include "Engine/Events/MouseEvent.h"
 
-
-
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <chrono>             
-
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
+
+#include <chrono>
 #include <filesystem>
+#include <iostream>
 
 namespace Engine {
 
@@ -56,29 +36,9 @@ namespace Engine {
 
     void Application::OnEvent(Event& e) {
         EventDispatcher dispatcher(e);
-        dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& ev) { return OnWindowClose(ev); });
-        dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& ev) { return OnWindowResize(ev); });
+        dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent&) { m_Running = false; return true; });
+        dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent&) { return false; });
 
-        //dispatcher.Dispatch<WindowFocusEvent>([this](WindowFocusEvent& ev) {
-        //    m_HasFocus = ev.IsFocused();
-        //    if (!m_HasFocus) {
-        //        // Always release on focus loss
-        //        m_CaptureMouse = false;
-        //        m_Window->SetCursorMode(false);
-        //    }
-        //    return false;
-        //    });
-
-        // Optional: click to capture when focused
-        //dispatcher.Dispatch<MouseButtonPressedEvent>([this](MouseButtonPressedEvent& mb) {
-        //    if (!m_HasFocus) return false;
-        //    if (mb.GetMouseButton() == 0) { // left click captures
-        //        m_CaptureMouse = true;
-        //        m_Window->SetCursorMode(true);
-        //        return true;
-        //    }
-        //    return false;
-        //    });
         dispatcher.Dispatch<WindowFocusEvent>([this](WindowFocusEvent& ev) {
             m_HasFocus = ev.IsFocused();
 
@@ -87,14 +47,12 @@ namespace Engine {
                 m_Window->SetCursorMode(false);
             }
             else {
-                // Optional: auto recapture when returning
                 m_CaptureMouse = true;
                 m_Window->SetCursorMode(true);
             }
             return false;
             });
 
-        // Esc toggles capture
         dispatcher.Dispatch<KeyPressedEvent>([this](KeyPressedEvent& ke) {
             if (ke.GetKeyCode() == GLFW_KEY_ESCAPE) {
                 m_CaptureMouse = !m_CaptureMouse;
@@ -104,59 +62,36 @@ namespace Engine {
             return false;
             });
     }
-    bool Application::OnWindowClose(WindowCloseEvent&) {
-        m_Running = false;
-        return true;
-    }
-
-    bool Application::OnWindowResize(WindowResizeEvent& e) {
-        // If minimized, skip rendering
-        if (e.GetWidth() == 0 || e.GetHeight() == 0)
-            return false;
-        return false; // not "handled" strictly; pipeline can still resize each frame
-    }
 
     void Application::Run() {
-        CameraController camCtrl(1.0472f, 1280.0f / 720.0f, 0.1f, 100.0f);
+        CameraController camCtrl(1.0472f, 1280.0f / 720.0f, 0.1f, 300.0f);
         RendererPipeline pipeline;
 
-        auto& assets = AssetManager::Get();
-
         Scene scene;
-
-        /*auto monkey = scene.CreateEntity("Monkey");
-        monkey.GetComponent<TransformComponent>().Translation = { 0.0f, 0.0f, 0.0f };
-        monkey.AddComponent<MeshRendererComponent>(monkeyModelH);
-
-        auto sun = scene.CreateEntity("SunLight");
-        sun.AddComponent<DirectionalLightComponent>(
-            glm::vec3(0.4f, 0.8f, -0.3f),
-            glm::vec3(1.0f, 1.0f, 1.0f)
-        );*/
-
         SceneSerializer serializer(scene);
-        //serializer.Serialize("Assets/Scenes/Sandbox.scene");
 
-        // OPTIONAL: test load immediately (into the same scene)
-        serializer.Deserialize("Assets/Scenes/Sandbox.scene");
         const std::string scenePath = "Assets/Scenes/Sandbox.scene";
         if (!serializer.Deserialize(scenePath)) {
-            std::cerr << "[Sandbox] Failed to load scene: " << scenePath
+            std::cerr << "[Sandbox] Failed to load: " << scenePath
                 << " (cwd=" << std::filesystem::current_path().string() << ")\n";
         }
+
         // --- APPLY SPAWN POINT (if any) ---
         {
-            auto view = scene.Registry().view<TransformComponent, SpawnPointComponent>();
+            auto view = scene.Registry().view<TagComponent, TransformComponent, SpawnPointComponent>();
 
-            entt::entity ent = entt::null;
-            for (auto e : view) { ent = e; break; }
+            entt::entity chosen = entt::null;
+            for (auto e : view) {
+                const auto& tag = view.get<TagComponent>(e).Tag;
+                if (tag == "SpawnPoint") { chosen = e; break; }
+                if (chosen == entt::null) chosen = e;
+            }
 
-            if (ent != entt::null) {
-                auto& tc = view.get<TransformComponent>(ent);
-
-                std::cout << "[Sandbox] SpawnPoint at "
-                    << tc.Translation.x << ", " << tc.Translation.y << ", " << tc.Translation.z
-                    << " rot(p,y)=(" << tc.Rotation.x << ", " << tc.Rotation.y << ")\n";
+            if (chosen != entt::null) {
+                auto& tc = view.get<TransformComponent>(chosen);
+                std::cout << "[Sandbox] SpawnPoint pos=("
+                    << tc.Translation.x << "," << tc.Translation.y << "," << tc.Translation.z
+                    << ") rot(p,y)=(" << tc.Rotation.x << "," << tc.Rotation.y << ")\n";
 
                 camCtrl.SetTransform(tc.Translation, tc.Rotation.y, tc.Rotation.x);
             }
@@ -165,56 +100,38 @@ namespace Engine {
             }
         }
 
-        auto start = std::chrono::high_resolution_clock::now();
-        auto last = start;
-        bool captureMouse = true;
+        auto last = std::chrono::high_resolution_clock::now();
 
         while (m_Running && !m_Window->ShouldClose()) {
             auto now = std::chrono::high_resolution_clock::now();
             float dt = std::chrono::duration<float>(now - last).count();
             last = now;
 
-            float t = std::chrono::duration<float>(now - start).count();
-
-            camCtrl.SetActive(m_HasFocus && m_CaptureMouse);
-            if (m_HasFocus && m_CaptureMouse)
-                camCtrl.OnUpdate(dt);
-
-            //camCtrl.OnUpdate(dt);
-
-            // Spin monkey by updating its TransformComponent
-            //monkey.GetComponent<TransformComponent>().Rotation.y = t;
-
-            scene.OnUpdate(dt);
-
-            pipeline.BeginScenePass(m_Window->GetWidth(), m_Window->GetHeight(), camCtrl.GetCamera());
-            Renderer::ClearLights();
-            {
-                auto view = scene.Registry().view<TransformComponent, DirectionalLightComponent>();
-
-                entt::entity ent = entt::null;
-                for (auto e : view) { ent = e; break; }
-
-                if (ent != entt::null) {
-                    auto& tc = view.get<TransformComponent>(ent);
-                    auto& dl = view.get<DirectionalLightComponent>(ent);
-
-                    glm::vec3 dir{
-                        cosf(tc.Rotation.x) * sinf(tc.Rotation.y),
-                        sinf(tc.Rotation.x),
-                        -cosf(tc.Rotation.x) * cosf(tc.Rotation.y)
-                    };
-                    dl.Direction = glm::normalize(dir);
-
-                    Renderer::SetDirectionalLight(dl.Direction, dl.Color);
-                }
+            if (!m_HasFocus) {
+                m_Window->OnUpdate();
+                continue;
             }
-            scene.OnRender(camCtrl.GetCamera());          // submits only
+
+            if (dt > 0.1f) dt = 0.1f;
+
+            camCtrl.SetActive(m_CaptureMouse);
+            camCtrl.OnUpdate(m_CaptureMouse ? dt : 0.0f);
+
+            uint32_t w = m_Window->GetWidth();
+            uint32_t h = m_Window->GetHeight();
+            if (w == 0 || h == 0) {
+                m_Window->OnUpdate();
+                continue;
+            }
+
+            pipeline.BeginScenePass(w, h, camCtrl.GetCamera());
+            scene.OnUpdate(dt);
+            scene.OnRender(camCtrl.GetCamera()); // submits only + pushes light inside Scene
             pipeline.EndScenePass();
             pipeline.PresentToScreen();
 
             m_Window->OnUpdate();
         }
     }
-    
-}
+
+} // namespace Engine

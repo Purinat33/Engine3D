@@ -1,4 +1,5 @@
 #include <Engine/Core/Window.h>
+
 #include <Engine/Renderer/Renderer.h>
 #include <Engine/Renderer/RendererPipeline.h>
 #include <Engine/Renderer/CameraController.h>
@@ -18,13 +19,13 @@
 #include <GLFW/glfw3.h>
 
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 
 using namespace Engine;
 
 int main() {
     auto window = Window::Create({ "Engine3D - Sandbox", 1280, 720 });
-    GLFWwindow* native = (GLFWwindow*)window->GetNativeWindow();
 
     Renderer::Init();
     RendererPipeline pipeline;
@@ -55,16 +56,14 @@ int main() {
             hasFocus = ev.IsFocused();
 
             if (!hasFocus) {
-                // Always release on focus loss
                 window->SetCursorMode(false);
                 cam.SetActive(false);
-                cam.OnUpdate(0.0f); // resets first mouse in your controller
+                cam.OnUpdate(0.0f); // reset first mouse
             }
             else {
-                // Restore cursor mode based on capture state
                 window->SetCursorMode(captureMouse);
                 cam.SetActive(captureMouse);
-                cam.OnUpdate(0.0f); // prevent jump
+                cam.OnUpdate(0.0f);
             }
             return false;
             });
@@ -74,7 +73,7 @@ int main() {
                 captureMouse = !captureMouse;
                 window->SetCursorMode(captureMouse);
                 cam.SetActive(captureMouse);
-                cam.OnUpdate(0.0f); // reset first mouse after toggle
+                cam.OnUpdate(0.0f);
                 return true;
             }
             return false;
@@ -92,6 +91,7 @@ int main() {
 
     if (!serializer.Deserialize(startupScenePath)) {
         std::cout << "[Sandbox] Failed to load: " << startupScenePath << "\n";
+        std::cout << "[Sandbox] cwd=" << std::filesystem::current_path().string() << "\n";
         std::cout << "[Sandbox] Creating default scene...\n";
 
         auto& assets = AssetManager::Get();
@@ -113,6 +113,31 @@ int main() {
         std::cout << "[Sandbox] Loaded startup scene: " << startupScenePath << "\n";
     }
 
+    // --- APPLY SPAWN POINT (if any) ---
+    {
+        auto view = scene.Registry().view<TagComponent, TransformComponent, SpawnPointComponent>();
+
+        entt::entity chosen = entt::null;
+        for (auto e : view) {
+            const auto& tag = view.get<TagComponent>(e).Tag;
+            if (tag == "SpawnPoint") { chosen = e; break; }
+            if (chosen == entt::null) chosen = e; // fallback to first
+        }
+
+        if (chosen != entt::null) {
+            auto& tc = view.get<TransformComponent>(chosen);
+            std::cout << "[Sandbox] SpawnPoint pos=("
+                << tc.Translation.x << "," << tc.Translation.y << "," << tc.Translation.z
+                << ") rot(p,y)=(" << tc.Rotation.x << "," << tc.Rotation.y << ")\n";
+
+            // SetTransform(position, yaw, pitch)
+            cam.SetTransform(tc.Translation, tc.Rotation.y, tc.Rotation.x);
+        }
+        else {
+            std::cout << "[Sandbox] No SpawnPoint found.\n";
+        }
+    }
+
     auto last = std::chrono::high_resolution_clock::now();
 
     while (running && !window->ShouldClose()) {
@@ -120,13 +145,11 @@ int main() {
         float dt = std::chrono::duration<float>(now - last).count();
         last = now;
 
-        // If unfocused, don't advance sim (avoids huge dt after alt-tab)
         if (!hasFocus) {
-            window->OnUpdate(); // polls events + swaps
+            window->OnUpdate();
             continue;
         }
 
-        // Clamp dt in case OS stalls
         if (dt > 0.1f) dt = 0.1f;
 
         if (captureMouse) {
@@ -135,23 +158,22 @@ int main() {
         }
         else {
             cam.SetActive(false);
-            cam.OnUpdate(0.0f); // keep first-mouse reset while free cursor
+            cam.OnUpdate(0.0f);
         }
 
         uint32_t w = window->GetWidth();
         uint32_t h = window->GetHeight();
-        if (w == 0 || h == 0) { // minimized
+        if (w == 0 || h == 0) {
             window->OnUpdate();
             continue;
         }
 
         pipeline.BeginScenePass(w, h, cam.GetCamera());
         scene.OnUpdate(dt);
-        scene.OnRender(cam.GetCamera());
+        scene.OnRender(cam.GetCamera()); // submits only
         pipeline.EndScenePass();
 
         pipeline.PresentToScreen();
-
         window->OnUpdate();
     }
 

@@ -6,12 +6,11 @@
 #include "Engine/Assets/AssetManager.h"
 
 #include "Engine/Renderer/Renderer.h"
-#include "Engine/Renderer/Material.h"
-#include "Engine/Renderer/Shader.h"
 #include "Engine/Renderer/Model.h"
+#include "Engine/Renderer/Material.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
 
-#include <unordered_set>
+#include <cmath>
 
 namespace Engine {
 
@@ -29,21 +28,6 @@ namespace Engine {
         return entity;
     }
 
-    Entity Scene::FindEntityByPickID(uint32_t pickID) {
-        if (pickID == 0) return {};
-
-        auto view = m_Registry.view<IDComponent>();
-        for (auto e : view) {
-            const auto& idc = view.get<IDComponent>(e);
-            uint32_t folded = (uint32_t)(idc.ID ^ (idc.ID >> 32));
-            if (folded == 0) folded = 1u;
-
-            if (folded == pickID)
-                return Entity(e, &m_Registry);
-        }
-        return {};
-    }
-
     void Scene::DestroyEntity(Entity entity) {
         if (!entity) return;
         m_Registry.destroy(entity.GetHandle());
@@ -57,63 +41,57 @@ namespace Engine {
         // Later: scripts, animation, physics, etc.
     }
 
-    void Scene::OnRender(const PerspectiveCamera& camera) {
+    void Scene::OnRender(const PerspectiveCamera& /*camera*/) {
         auto& assets = AssetManager::Get();
 
-        glm::vec3 lightDir{ 0.4f, 0.8f, -0.3f };
-        glm::vec3 lightColor{ 1.0f };
+        // --- Lighting: pick first directional light, or use a default ---
+        Renderer::ClearLights();
 
-        // First directional light
-        {
-            auto lightView = m_Registry.view<DirectionalLightComponent>();
-            bool found = false;
-            lightView.each([&](auto /*entity*/, DirectionalLightComponent& light) {
-                if (found) return;
-                lightDir = light.Direction;
-                lightColor = light.Color;
-                found = true;
-                });
+        bool foundLight = false;
+        auto lightView = m_Registry.view<TransformComponent, DirectionalLightComponent>();
+        for (auto e : lightView) {
+            auto& tc = lightView.get<TransformComponent>(e);
+            auto& dl = lightView.get<DirectionalLightComponent>(e);
+
+            // Transform rotation -> forward dir (-Z baseline)
+            glm::vec3 dir{
+                cosf(tc.Rotation.x) * sinf(tc.Rotation.y),
+                sinf(tc.Rotation.x),
+                -cosf(tc.Rotation.x) * cosf(tc.Rotation.y)
+            };
+
+            if (glm::length(dir) < 0.0001f)
+                dir = dl.Direction;
+
+            Renderer::SetDirectionalLight(glm::normalize(dir), dl.Color);
+
+            // Optional: keep component Direction in sync with what rotation means
+            dl.Direction = glm::normalize(dir);
+
+            foundLight = true;
+            break;
         }
 
-        // Unique shaders used this frame
-        std::unordered_set<Shader*> uniqueShaders;
+        if (!foundLight) {
+            // Keep lighting mode "on" so you don't get the confusing unlit-albedo look.
+            Renderer::SetDirectionalLight(glm::vec3(0.4f, 0.8f, -0.3f), glm::vec3(1.0f));
+        }
 
+        // --- Render meshes (submit only; pipeline owns BeginScene/EndScene) ---
         auto renderView = m_Registry.view<TransformComponent, MeshRendererComponent>();
-        renderView.each([&](auto /*entity*/, TransformComponent&, MeshRendererComponent& mrc) {
-            if (mrc.Model == InvalidAssetHandle) return;
-            auto model = assets.GetModel(mrc.Model);
-            if (!model) return;
-
-            for (const auto& sm : model->GetSubMeshes()) {
-                if (!sm.MaterialPtr) continue;
-                const auto& shader = sm.MaterialPtr->GetShader();
-                if (shader) uniqueShaders.insert(shader.get());
-            }
-            });
-
-        for (Shader* sh : uniqueShaders) {
-            sh->Bind();
-            sh->SetFloat3("u_LightDir", lightDir.x, lightDir.y, lightDir.z);
-            sh->SetFloat3("u_LightColor", lightColor.x, lightColor.y, lightColor.z);
-        }
-
-        /*Renderer::BeginScene(camera);*/
-
         renderView.each([&](auto /*entity*/, TransformComponent& tc, MeshRendererComponent& mrc) {
             if (mrc.Model == InvalidAssetHandle) return;
 
-            auto model = AssetManager::Get().GetModel(mrc.Model);
+            auto model = assets.GetModel(mrc.Model);
             if (!model) return;
 
-            glm::mat4 entityTransform = tc.GetTransform();
+            glm::mat4 world = tc.GetTransform();
 
             for (const auto& sm : model->GetSubMeshes()) {
                 if (!sm.MeshPtr || !sm.MaterialPtr) continue;
-                Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), entityTransform);
+                Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), world);
             }
             });
-
-        /*Renderer::EndScene();*/
     }
 
     Entity Scene::FindEntityByUUID(UUID id) {
@@ -136,20 +114,29 @@ namespace Engine {
         return {};
     }
 
+    Entity Scene::FindEntityByPickID(uint32_t pickID) {
+        if (pickID == 0) return {};
+
+        auto view = m_Registry.view<IDComponent>();
+        for (auto e : view) {
+            const auto& idc = view.get<IDComponent>(e);
+            uint32_t folded = (uint32_t)(idc.ID ^ (idc.ID >> 32));
+            if (folded == 0) folded = 1u;
+            if (folded == pickID)
+                return Entity(e, &m_Registry);
+        }
+        return {};
+    }
+
     static uint32_t ToPickID(Engine::UUID id) {
-        // fold 64 -> 32, keep 0 reserved as "none"
         uint32_t v = (uint32_t)(id ^ (id >> 32));
         return v == 0 ? 1u : v;
     }
 
-    void Scene::OnRenderPicking(const PerspectiveCamera& camera, const std::shared_ptr<Material>& idMaterial) {
-        (void)camera; // pipeline owns BeginScene(camera)
-
+    void Scene::OnRenderPicking(const PerspectiveCamera& /*camera*/, const std::shared_ptr<Material>& idMaterial) {
         auto& assets = AssetManager::Get();
 
-        // We need ID + Transform + Mesh
         auto view = m_Registry.view<IDComponent, TransformComponent, MeshRendererComponent>();
-
         view.each([&](auto /*entity*/, IDComponent& idc, TransformComponent& tc, MeshRendererComponent& mrc) {
             if (mrc.Model == InvalidAssetHandle) return;
 
@@ -169,14 +156,12 @@ namespace Engine {
     Entity Scene::DuplicateEntity(Entity src) {
         if (!src) return {};
 
-        // Name: "<Tag> Copy" if Tag exists
         std::string name = "Entity Copy";
         if (src.HasComponent<TagComponent>())
             name = src.GetComponent<TagComponent>().Tag + " Copy";
 
         Entity dst = CreateEntity(name.c_str());
 
-        // Copy known components
         if (src.HasComponent<TransformComponent>())
             dst.GetComponent<TransformComponent>() = src.GetComponent<TransformComponent>();
 
@@ -185,6 +170,12 @@ namespace Engine {
 
         if (src.HasComponent<DirectionalLightComponent>())
             dst.AddComponent<DirectionalLightComponent>(src.GetComponent<DirectionalLightComponent>());
+
+        if (src.HasComponent<SpawnPointComponent>())
+            dst.AddComponent<SpawnPointComponent>(src.GetComponent<SpawnPointComponent>());
+
+        if (src.HasComponent<SceneWarpComponent>())
+            dst.AddComponent<SceneWarpComponent>(src.GetComponent<SceneWarpComponent>());
 
         return dst;
     }
