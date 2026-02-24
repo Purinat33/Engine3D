@@ -87,7 +87,10 @@ namespace Engine {
                     const auto& sw = reg.get<SceneWarpComponent>(entity);
                     e["SceneWarp"]["TargetScene"] = sw.TargetScene;
                     e["SceneWarp"]["TargetSpawnTag"] = sw.TargetSpawnTag;
+                    e["SceneWarp"]["TargetWarpTag"] = sw.TargetWarpTag;
+
                     e["SceneWarp"]["TriggerRadius"] = sw.TriggerRadius; // NEW
+                    
                 }
 
                 root["Entities"].push_back(e);
@@ -177,9 +180,12 @@ namespace Engine {
                 if (e.contains("SceneWarp")) {
                     auto& sw = ent.AddComponent<SceneWarpComponent>();
                     const auto& j = e["SceneWarp"];
-                    sw.TargetScene = j.value("TargetScene", "Assets/Scenes/Sandbox.scene");
+                    sw.TargetScene = j.value("TargetScene", "");
                     sw.TargetSpawnTag = j.value("TargetSpawnTag", "");
+                    sw.TargetWarpTag = j.value("TargetWarpTag", "");
+
                     sw.TriggerRadius = j.value("TriggerRadius", 1.0f); // NEW
+                    
                 }
             }
 

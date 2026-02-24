@@ -1192,6 +1192,13 @@ int main() {
                 //        }
                 //    }
                 //}
+                static char TagBuf[128];
+                std::snprintf(TagBuf, sizeof(TagBuf), "%s", tag.c_str());
+                if (ImGui::InputText("Tag", TagBuf, sizeof(TagBuf))) {
+                    tag = TagBuf;
+                    sceneMgr.MarkDirty();
+                }
+
                 ImGui::Separator();
                 // UI for warp and spawn
                 if (selectedEntity.HasComponent<SpawnPointComponent>()) {
@@ -1231,6 +1238,13 @@ int main() {
                     std::snprintf(spawnTagBuf, sizeof(spawnTagBuf), "%s", sw.TargetSpawnTag.c_str());
                     if (ImGui::InputText("To Spawn Tag", spawnTagBuf, sizeof(spawnTagBuf))) {
                         sw.TargetSpawnTag = spawnTagBuf;
+                        sceneMgr.MarkDirty();
+                    }
+
+                    static char warpTagBuf[128];
+                    std::snprintf(warpTagBuf, sizeof(warpTagBuf), "%s", sw.TargetWarpTag.c_str());
+                    if (ImGui::InputText("To Warp Tag (Optional)", warpTagBuf, sizeof(warpTagBuf))) {
+                        sw.TargetWarpTag = warpTagBuf;
                         sceneMgr.MarkDirty();
                     }
 

@@ -274,12 +274,35 @@ static bool ApplySpawn(Scene& scene, CameraController& cam, const std::string& p
     return false;
 }
 
-static bool TryWarp(Scene& scene, CameraController& cam, float dt)
+
+static bool ApplyWarpDestination(Scene& scene, CameraController& cam,
+    const std::string& targetWarpTag,
+    const std::string& fallbackSpawnTag)
+{
+    // 1) Try warp-to-warp
+    if (!targetWarpTag.empty()) {
+        auto& reg = scene.Registry();
+        auto view = reg.view<TagComponent, TransformComponent, SceneWarpComponent>();
+
+        for (auto e : view) {
+            const auto& tag = view.get<TagComponent>(e).Tag;
+            if (tag == targetWarpTag) {
+                const auto& tc = view.get<TransformComponent>(e);
+                cam.SetTransform(tc.Translation, tc.Rotation.y, tc.Rotation.x);
+                return true;
+            }
+        }
+    }
+
+    // 2) Fallback: spawnpoint logic (your existing function)
+    return ApplySpawn(scene, cam, fallbackSpawnTag);
+}
+
+
+static bool TryWarp(Scene& scene, CameraController& cam, float dt, std::string& currentScenePath)
 {
     static float cooldown = 0.0f;
-    static UUID lastWarpID = 0;
-
-    if (cooldown > 0.0f) cooldown -= dt;
+    if (cooldown > 0.0f) { cooldown -= dt; return false; } // block ALL warps during cooldown
 
     auto& reg = scene.Registry();
     auto view = reg.view<IDComponent, TransformComponent, SceneWarpComponent>();
@@ -287,7 +310,6 @@ static bool TryWarp(Scene& scene, CameraController& cam, float dt)
     glm::vec3 camPos = cam.GetPosition();
 
     for (auto e : view) {
-        auto& idc = view.get<IDComponent>(e);
         auto& tc = view.get<TransformComponent>(e);
         auto& sw = view.get<SceneWarpComponent>(e);
 
@@ -295,28 +317,27 @@ static bool TryWarp(Scene& scene, CameraController& cam, float dt)
         glm::vec3 d = camPos - tc.Translation;
         if (glm::dot(d, d) > r * r) continue;
 
-        // Prevent instant re-trigger (ping-pong / spawn inside warp)
-        if (cooldown > 0.0f && idc.ID == lastWarpID)
-            continue;
+        // --- SAME SCENE warp (no reload) ---
+        if (sw.TargetScene.empty() || sw.TargetScene == currentScenePath) {
+            ApplyWarpDestination(scene, cam, sw.TargetWarpTag, sw.TargetSpawnTag);
+            cooldown = 0.75f;
+            return true;
+        }
 
-        if (sw.TargetScene.empty())
-            continue;
-
+        // --- DIFFERENT SCENE warp (reload) ---
         SceneSerializer serializer(scene);
         if (!serializer.Deserialize(sw.TargetScene)) {
             std::cout << "[Warp] Failed to load target scene: " << sw.TargetScene << "\n";
             cooldown = 0.5f;
-            lastWarpID = idc.ID;
-            return true; // “handled” this frame
+            return true;
         }
 
-        // After loading the new scene, apply spawn (optional tag)
-        ApplySpawn(scene, cam, sw.TargetSpawnTag);
+        currentScenePath = sw.TargetScene;
 
-        // Cooldown to prevent immediate re-trigger
+        // Go to target warp tag if possible, else fallback to spawnpoint
+        ApplyWarpDestination(scene, cam, sw.TargetWarpTag, sw.TargetSpawnTag);
+
         cooldown = 0.75f;
-        lastWarpID = idc.ID;
-
         std::cout << "[Warp] Loaded: " << sw.TargetScene << "\n";
         return true;
     }
@@ -397,6 +418,7 @@ int main() {
 
     const std::string fallbackScene = "Assets/Scenes/Sandbox.scene";
     const std::string startupScenePath = ProjectSettings::GetStartupSceneOrDefault(fallbackScene);
+    std::string currentScenePath = startupScenePath;
 
     if (!serializer.Deserialize(startupScenePath)) {
         std::cout << "[Sandbox] Failed to load: " << startupScenePath << "\n";
@@ -490,7 +512,7 @@ int main() {
         }
 
         // NOW try warp BEFORE building shadows / rendering
-        if (TryWarp(scene, cam, dt)) {
+        if (TryWarp(scene, cam, dt, currentScenePath)) {
             // scene got replaced; skip this frame so everything recomputes clean next frame
             window->OnUpdate();
             continue;

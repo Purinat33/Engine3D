@@ -1,34 +1,14 @@
 {
   "Entities": [
     {
-      "ID": 18215034901052471584,
-      "SpawnPoint": true,
-      "Tag": "SpawnPoint",
-      "Transform": {
-        "Rotation": [
-          -1.6039990186691284,
-          3.139596939086914,
-          -3.240000009536743
-        ],
-        "Scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "Translation": [
-          -0.9996213912963867,
-          5.7451276779174805,
-          -24.80329132080078
-        ]
-      }
-    },
-    {
-      "ID": 17258450948503458192,
-      "MeshRenderer": {
-        "ModelPath": "Assets/Models/monkey.obj",
-        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      "ID": 16996601544413798695,
+      "SceneWarp": {
+        "TargetScene": "Assets/Scenes/Test1.scene",
+        "TargetSpawnTag": "",
+        "TargetWarpTag": "SceneWarp1",
+        "TriggerRadius": 1.0
       },
-      "Tag": "monkey",
+      "Tag": "SceneWarp",
       "Transform": {
         "Rotation": [
           0.0,
@@ -41,39 +21,14 @@
           1.0
         ],
         "Translation": [
-          0.0,
-          3.092582941055298,
-          5.05916166305542
+          -8.621000289916992,
+          6.639999866485596,
+          -16.091999053955078
         ]
       }
     },
     {
-      "ID": 9608307048111991315,
-      "MeshRenderer": {
-        "ModelPath": "Assets/Models/Wall/wall.gltf",
-        "ShaderPath": "Assets/Shaders/Lit.glsl"
-      },
-      "Tag": "wall Copy",
-      "Transform": {
-        "Rotation": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "Scale": [
-          3.296300172805786,
-          3.296300172805786,
-          3.296300172805786
-        ],
-        "Translation": [
-          0.0,
-          3.14296555519104,
-          -17.41765785217285
-        ]
-      }
-    },
-    {
-      "ID": 12191261093871392135,
+      "ID": 6645259610360684173,
       "MeshRenderer": {
         "ModelPath": "Assets/Models/Wall/wall.gltf",
         "ShaderPath": "Assets/Shaders/Lit.glsl"
@@ -81,19 +36,46 @@
       "Tag": "wall",
       "Transform": {
         "Rotation": [
+          -1.5707961320877075,
+          -0.062359631061553955,
+          0.08726486563682556
+        ],
+        "Scale": [
+          9.319999694824219,
+          28.579999923706055,
+          0.625
+        ],
+        "Translation": [
+          0.0,
+          0.09536075592041016,
+          0.0
+        ]
+      }
+    },
+    {
+      "ID": 5077662215763121657,
+      "SceneWarp": {
+        "TargetScene": "Assets/Scenes/Sandbox.scene",
+        "TargetSpawnTag": "",
+        "TargetWarpTag": "",
+        "TriggerRadius": 1.0
+      },
+      "Tag": "SceneWarp1",
+      "Transform": {
+        "Rotation": [
           0.0,
           0.0,
           0.0
         ],
         "Scale": [
-          3.296300172805786,
-          3.296300172805786,
-          3.296300172805786
+          1.0,
+          1.0,
+          1.0
         ],
         "Translation": [
-          0.0,
-          3.14296555519104,
-          0.0
+          -0.48899999260902405,
+          3.693000078201294,
+          6.623000144958496
         ]
       }
     },
@@ -126,13 +108,62 @@
       }
     },
     {
-      "ID": 5077662215763121657,
-      "SceneWarp": {
-        "TargetScene": "Assets/Scenes/Sandbox.scene",
-        "TargetSpawnTag": "",
-        "TriggerRadius": 1.0
+      "ID": 12191261093871392135,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/Wall/wall.gltf",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
       },
-      "Tag": "SceneWarp",
+      "Tag": "wall",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          3.296300172805786,
+          3.296300172805786,
+          3.296300172805786
+        ],
+        "Translation": [
+          0.0,
+          3.14296555519104,
+          0.0
+        ]
+      }
+    },
+    {
+      "ID": 9608307048111991315,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/Wall/wall.gltf",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      },
+      "Tag": "wall Copy",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          3.296300172805786,
+          3.296300172805786,
+          3.296300172805786
+        ],
+        "Translation": [
+          0.0,
+          3.14296555519104,
+          -17.41765785217285
+        ]
+      }
+    },
+    {
+      "ID": 17258450948503458192,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/monkey.obj",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      },
+      "Tag": "monkey",
       "Transform": {
         "Rotation": [
           0.0,
@@ -145,34 +176,31 @@
           1.0
         ],
         "Translation": [
-          -0.48899999260902405,
-          3.693000078201294,
-          6.623000144958496
+          0.0,
+          3.092582941055298,
+          5.05916166305542
         ]
       }
     },
     {
-      "ID": 6645259610360684173,
-      "MeshRenderer": {
-        "ModelPath": "Assets/Models/Wall/wall.gltf",
-        "ShaderPath": "Assets/Shaders/Lit.glsl"
-      },
-      "Tag": "wall",
+      "ID": 18215034901052471584,
+      "SpawnPoint": true,
+      "Tag": "SpawnPoint",
       "Transform": {
         "Rotation": [
-          -1.5707961320877075,
-          -0.062359631061553955,
-          0.08726486563682556
+          -1.6039990186691284,
+          3.139596939086914,
+          -3.240000009536743
         ],
         "Scale": [
-          9.319999694824219,
-          28.579999923706055,
-          0.625
+          1.0,
+          1.0,
+          1.0
         ],
         "Translation": [
-          0.0,
-          0.09536075592041016,
-          0.0
+          -0.9996213912963867,
+          5.7451276779174805,
+          -24.80329132080078
         ]
       }
     }
