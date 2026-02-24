@@ -196,8 +196,8 @@ namespace Engine {
             m_ShadowAllocCascades = m_ShadowCascadeCount;
         }
 
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
         glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
         glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
@@ -257,11 +257,16 @@ namespace Engine {
         glClear(GL_DEPTH_BUFFER_BIT);
 
         // DEBUG: disable culling until you see non-empty depth
-        glDisable(GL_CULL_FACE);
+        //glDisable(GL_CULL_FACE);
         // later, re-enable and choose one:
         // glEnable(GL_CULL_FACE);
         // glCullFace(GL_BACK);  // safer default
         // (then maybe GL_FRONT once it's working)
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_FRONT); // common for shadow maps to reduce self-shadowing
+
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(2.0f, 4.0f); // tweak if needed
 
         Renderer::BeginScene(lightViewProj);
         m_ShadowPassActive = true;
@@ -275,6 +280,7 @@ namespace Engine {
 
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
+        glDisable(GL_POLYGON_OFFSET_FILL);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
