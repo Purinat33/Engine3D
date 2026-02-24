@@ -178,25 +178,36 @@ namespace Engine {
         m_ShadowSize = shadowSize;
 
         if (m_ShadowFBO == 0) glGenFramebuffers(1, &m_ShadowFBO);
-        if (m_ShadowDepthTex == 0) glGenTextures(1, &m_ShadowDepthTex);
+        if (m_ShadowDepthTexArray == 0) glGenTextures(1, &m_ShadowDepthTexArray);
 
-        glBindTexture(GL_TEXTURE_2D, m_ShadowDepthTex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_ShadowSize, m_ShadowSize, 0,
-            GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_ShadowDepthTexArray);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_ShadowDepthTexArray);
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        const bool needAlloc =
+            (m_ShadowAllocSize != m_ShadowSize) ||
+            (m_ShadowAllocCascades != m_ShadowCascadeCount);
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        if (needAlloc) {
+            glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT24,
+                m_ShadowSize, m_ShadowSize, m_ShadowCascadeCount,
+                0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+
+            m_ShadowAllocSize = m_ShadowSize;
+            m_ShadowAllocCascades = m_ShadowCascadeCount;
+        }
+
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
         float border[4] = { 1,1,1,1 };
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+        glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, border);
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_ShadowFBO);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_ShadowDepthTex, 0);
+        // NOTE: we attach the *layer* later using glFramebufferTextureLayer(...)
         glDrawBuffer(GL_NONE);
         glReadBuffer(GL_NONE);
-
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         if (!m_ShadowDepthShader) {
@@ -205,22 +216,30 @@ namespace Engine {
         }
     }
 
-    void RendererPipeline::BeginShadowPass(uint32_t shadowSize, const glm::mat4& lightViewProj) {
+    void RendererPipeline::BeginShadowPass(uint32_t shadowSize,
+        const glm::mat4& lightViewProj,
+        uint32_t cascadeIndex,
+        uint32_t cascadeCount)
+    {
+        m_ShadowCascadeCount = std::min<uint32_t>(cascadeCount, MaxCascades);
         EnsureShadowResources(shadowSize);
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_ShadowFBO);
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+            m_ShadowDepthTexArray, 0, (int)cascadeIndex);
+
         RenderCommand::SetViewport(0, 0, m_ShadowSize, m_ShadowSize);
         glClear(GL_DEPTH_BUFFER_BIT);
 
         glEnable(GL_DEPTH_TEST);
 
-        // helps reduce acne on many meshes
         glEnable(GL_CULL_FACE);
-        glCullFace(GL_FRONT);
+        glCullFace(GL_FRONT); // reduce acne
 
         Renderer::BeginScene(lightViewProj);
         m_ShadowPassActive = true;
     }
+
 
     void RendererPipeline::EndShadowPass() {
         if (!m_ShadowPassActive) return;

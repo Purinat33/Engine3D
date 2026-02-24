@@ -17,6 +17,13 @@ namespace Engine {
         const glm::mat4& GetView() const { return m_View; }
         const glm::mat4& GetProjection() const { return m_Projection; }
 
+        const glm::vec3& GetPosition() const { return m_Position; }
+        float GetNearClip() const { return m_Near; }
+        float GetFarClip() const { return m_Far; }
+        float GetFov() const { return m_Fov; }
+        float GetAspect() const { return m_Aspect; }
+
+
     private:
         void RecalculateProjection();
         void RecalculateView();

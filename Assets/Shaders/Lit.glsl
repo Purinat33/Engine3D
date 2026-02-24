@@ -37,31 +37,43 @@ uniform vec3 u_LightColor;
 uniform float u_Ambient;
 
 uniform int   u_UseShadows;
-uniform sampler2D u_ShadowMap;
-uniform mat4  u_LightSpaceMatrix;
+uniform sampler2DArray u_ShadowMapArray;
+uniform int   u_CascadeCount;
+uniform float u_CascadeSplits[4];
+uniform mat4  u_LightSpaceMatrices[4];
 uniform float u_ShadowBias;
 
-float ShadowFactor(vec3 worldPos, vec3 N, vec3 L) {
-    vec4 lp = u_LightSpaceMatrix * vec4(worldPos, 1.0);
+uniform mat4 u_View;
+
+float ShadowFactor(int cascadeIdx, vec3 worldPos, vec3 N, vec3 L)
+{
+    mat4 lightMat = u_LightSpaceMatrices[cascadeIdx];
+    vec4 lp = lightMat * vec4(worldPos, 1.0);
+
     vec3 proj = lp.xyz / lp.w;
     proj = proj * 0.5 + 0.5;
 
     // outside shadow map => no shadow
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
-    return 0.0;
+        return 0.0;
 
     float current = proj.z;
 
     // slope-scaled bias helps acne
     float bias = max(u_ShadowBias * (1.0 - dot(N, L)), u_ShadowBias);
 
-    // 3x3 PCF
-    vec2 texel = 1.0 / vec2(textureSize(u_ShadowMap, 0));
-    float shadow = 0.0;
+    ivec3 ts = textureSize(u_ShadowMapArray, 0);
+    vec2 texel = 1.0 / vec2(ts.xy);
 
+    // 3x3 PCF
+    float shadow = 0.0;
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
-            float pcfDepth = texture(u_ShadowMap, proj.xy + vec2(x, y) * texel).r;
+            float pcfDepth = texture(
+                u_ShadowMapArray,
+                vec3(proj.xy + vec2(x, y) * texel, float(cascadeIdx))
+            ).r;
+
             shadow += (current - bias > pcfDepth) ? 1.0 : 0.0;
         }
     }
@@ -81,9 +93,19 @@ vec3 L = normalize(-u_LightDir);
 
 float ndl = max(dot(N, L), 0.0);
 
+int cascadeIdx = 0;
+
+// TEMP (OK for now): use world distance as proxy.
+// Better later: camera-space depth using u_View or u_CameraPos.
+float viewDepth = -(u_View * vec4(v_WorldPos, 1.0)).z;
+
+if (u_CascadeCount > 1 && viewDepth > u_CascadeSplits[0]) cascadeIdx = 1;
+if (u_CascadeCount > 2 && viewDepth > u_CascadeSplits[1]) cascadeIdx = 2;
+if (u_CascadeCount > 3 && viewDepth > u_CascadeSplits[2]) cascadeIdx = 3;
+
 float shadow = 0.0;
 if (u_UseShadows == 1)
-    shadow = ShadowFactor(v_WorldPos, N, L);
+    shadow = ShadowFactor(cascadeIdx, v_WorldPos, N, L);
 
 // ambient NOT shadowed, diffuse IS shadowed
 vec3 lit = u_Ambient * u_LightColor + (1.0 - shadow) * ndl * u_LightColor;

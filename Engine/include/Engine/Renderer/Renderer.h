@@ -39,12 +39,19 @@ namespace Engine {
         static glm::vec3 s_DirLightDir;
         static glm::vec3 s_DirLightColor;
 
-        // --- Shadows ---
-        static bool s_HasShadows;
-        static uint32_t s_ShadowMapTex;
-        static glm::mat4 s_LightSpaceMatrix;
+        // --- Shadows (CSM) ---
+        static constexpr int MaxCascades = 4;
 
-        static void SetShadowMap(uint32_t depthTex, const glm::mat4& lightSpace);
+        static bool s_HasShadows;
+        static uint32_t s_ShadowMapArrayTex;
+        static int s_CascadeCount;
+        static float s_CascadeSplits[MaxCascades];      // view-space far distances
+        static glm::mat4 s_LightMatrices[MaxCascades];  // light VP per cascade
+
+        static void SetCSMShadowMap(uint32_t depthTexArray,
+            const glm::mat4* lightMatrices,
+            const float* cascadeSplits,
+            int cascadeCount);
         static void ClearShadowMap();
 
         // overload BeginScene so shadow pass can use an ortho VP
@@ -53,6 +60,8 @@ namespace Engine {
         // Skybox
         static void SetSkybox(const std::shared_ptr<TextureCube>& sky);
         static void DrawSkybox(const PerspectiveCamera& camera);
+
+        static glm::mat4 s_View;
 
     private:
         struct DrawCommand {

@@ -47,11 +47,16 @@ namespace Engine {
     bool Renderer::s_HasDirLight = false;
     glm::vec3 Renderer::s_DirLightDir = glm::vec3(0.4f, 0.8f, -0.3f);
     glm::vec3 Renderer::s_DirLightColor = glm::vec3(1.0f);
-
+    glm::mat4 Renderer::s_View{ 1.0f };
 
     bool Renderer::s_HasShadows = false;
-    uint32_t Renderer::s_ShadowMapTex = 0;
-    glm::mat4 Renderer::s_LightSpaceMatrix = glm::mat4(1.0f);
+    uint32_t Renderer::s_ShadowMapArrayTex = 0;
+    int Renderer::s_CascadeCount = 0;
+    float Renderer::s_CascadeSplits[Renderer::MaxCascades] = {};
+    glm::mat4 Renderer::s_LightMatrices[Renderer::MaxCascades] = {
+        glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f)
+    };
+
 
     void Renderer::Init() {
         RenderCommand::Init();
@@ -59,6 +64,7 @@ namespace Engine {
 
     void Renderer::BeginScene(const PerspectiveCamera& camera) {
         s_ViewProjection = camera.GetViewProjection();
+        s_View = camera.GetView();
         s_DrawList.clear();
         
     }
@@ -85,6 +91,7 @@ namespace Engine {
             shader->SetFloat3("u_LightDir", s_DirLightDir.x, s_DirLightDir.y, s_DirLightDir.z);
             shader->SetFloat3("u_LightColor", s_DirLightColor.x, s_DirLightColor.y, s_DirLightColor.z);
             shader->SetFloat("u_Ambient", 0.07f); // Set Light Level
+            shader->SetMat4("u_View", glm::value_ptr(s_View));
 
             // Default: no texture
             int useTexture0 = 0;
@@ -127,14 +134,21 @@ namespace Engine {
             constexpr uint32_t ShadowSlot = 15;
 
             shader->SetInt("u_UseShadows", s_HasShadows ? 1 : 0);
+
             if (s_HasShadows) {
-                shader->SetMat4("u_LightSpaceMatrix", glm::value_ptr(s_LightSpaceMatrix));
+                shader->SetInt("u_CascadeCount", s_CascadeCount);
+
+                for (int i = 0; i < s_CascadeCount; i++) {
+                    shader->SetMat4("u_LightSpaceMatrices[" + std::to_string(i) + "]",
+                        glm::value_ptr(s_LightMatrices[i]));
+                    shader->SetFloat("u_CascadeSplits[" + std::to_string(i) + "]", s_CascadeSplits[i]);
+                }
 
                 glActiveTexture(GL_TEXTURE0 + ShadowSlot);
-                glBindTexture(GL_TEXTURE_2D, s_ShadowMapTex);
-                shader->SetInt("u_ShadowMap", (int)ShadowSlot);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, s_ShadowMapArrayTex);
+                shader->SetInt("u_ShadowMapArray", (int)ShadowSlot);
 
-                shader->SetFloat("u_ShadowBias", 0.0015f); // tweak later
+                shader->SetFloat("u_ShadowBias", 0.0015f);
             }
 
             RenderCommand::DrawIndexed(count);
@@ -247,16 +261,25 @@ namespace Engine {
         s_DrawList.clear();
     }
 
-    void Renderer::SetShadowMap(uint32_t depthTex, const glm::mat4& lightSpace) {
-        s_HasShadows = (depthTex != 0);
-        s_ShadowMapTex = depthTex;
-        s_LightSpaceMatrix = lightSpace;
+    void Renderer::SetCSMShadowMap(uint32_t depthTexArray,
+        const glm::mat4* lightMatrices,
+        const float* cascadeSplits,
+        int cascadeCount)
+    {
+        s_HasShadows = (depthTexArray != 0);
+        s_ShadowMapArrayTex = depthTexArray;
+        s_CascadeCount = std::min(cascadeCount, MaxCascades);
+
+        for (int i = 0; i < s_CascadeCount; i++) {
+            s_LightMatrices[i] = lightMatrices[i];
+            s_CascadeSplits[i] = cascadeSplits[i];
+        }
     }
 
     void Renderer::ClearShadowMap() {
         s_HasShadows = false;
-        s_ShadowMapTex = 0;
-        s_LightSpaceMatrix = glm::mat4(1.0f);
+        s_ShadowMapArrayTex = 0;
+        s_CascadeCount = 0;
     }
 
 } // namespace Engine

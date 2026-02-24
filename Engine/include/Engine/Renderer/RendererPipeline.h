@@ -43,10 +43,17 @@ namespace Engine {
         int   m_Tonemap = 2;     // ACES default
         float m_Vignette = 0.0f;
 
-        void BeginShadowPass(uint32_t shadowSize, const glm::mat4& lightViewProj);
+        // --- Shadows (CSM) ---
+        static constexpr uint32_t MaxCascades = 4;
+
+        void BeginShadowPass(uint32_t shadowSize,
+            const glm::mat4& lightViewProj,
+            uint32_t cascadeIndex,
+            uint32_t cascadeCount = MaxCascades);
         void EndShadowPass();
 
-        uint32_t GetShadowDepthTexture() const { return m_ShadowDepthTex; }
+        uint32_t GetShadowDepthTextureArray() const { return m_ShadowDepthTexArray; }
+        uint32_t GetShadowCascadeCount() const { return m_ShadowCascadeCount; }
         std::shared_ptr<Material> GetShadowDepthMaterial() const { return m_ShadowDepthMaterial; }
 
     private:
@@ -77,13 +84,18 @@ namespace Engine {
         uint32_t m_SelectedID = 0;
 
         uint32_t m_ShadowSize = 2048;
+        uint32_t m_ShadowCascadeCount = MaxCascades;
+
         uint32_t m_ShadowFBO = 0;
-        uint32_t m_ShadowDepthTex = 0;
+        uint32_t m_ShadowDepthTexArray = 0; // GL_TEXTURE_2D_ARRAY
 
         std::shared_ptr<Shader>   m_ShadowDepthShader;
         std::shared_ptr<Material> m_ShadowDepthMaterial;
 
         bool m_ShadowPassActive = false;
+
+        uint32_t m_ShadowAllocSize = 0;
+        uint32_t m_ShadowAllocCascades = 0;
     };
 
 } // namespace Engine
