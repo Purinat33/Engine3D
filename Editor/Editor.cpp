@@ -1,3 +1,4 @@
+
 #include <Engine/Core/Window.h>
 #include <Engine/Renderer/Renderer.h>
 #include <Engine/Renderer/RendererPipeline.h>
@@ -37,6 +38,14 @@
 #include <filesystem>
 #include <algorithm>
 
+
+#ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN 
+    #define NOMINMAX
+    #include <Windows.h>
+#endif
+
+
 #include <chrono>
 #include <iostream>
 #include <cmath>
@@ -75,7 +84,7 @@ static float SnapFloat(float v, float step) {
     return std::round(v / step) * step;
 }
 
-static uint32_t FoldUUIDToPickID(UUID id) {
+static uint32_t FoldUUIDToPickID(Engine::UUID id) {
     uint32_t v = (uint32_t)(id ^ (id >> 32));
     return v == 0 ? 1u : v;
 }
@@ -418,6 +427,79 @@ static glm::vec3 EulerFromForward(const glm::vec3& fwd) {
 static const glm::mat4 markerFix =
 glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1, 0, 0)); // +Y -> -Z
 
+
+static std::filesystem::path GetThisExeDir()
+{
+#ifdef _WIN32
+    wchar_t buf[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+    if (len == 0) return std::filesystem::current_path();
+    return std::filesystem::path(buf).parent_path();
+#else
+    return std::filesystem::current_path();
+#endif
+}
+
+static bool LaunchSandboxExe(const std::string& extraArgs, std::string& outError)
+{
+    // Your output layout: bin/<cfg-platform>/<ProjectName>/
+    // So Editor.exe is in:   .../Editor/
+    // And Sandbox.exe is in: .../Sandbox/
+    std::filesystem::path editorDir = GetThisExeDir();
+    std::filesystem::path sandboxExe = (editorDir / ".." / "Sandbox" / "Sandbox.exe").lexically_normal();
+
+    if (!std::filesystem::exists(sandboxExe)) {
+        outError = "Sandbox exe not found: " + sandboxExe.string();
+        return false;
+    }
+
+#ifdef _WIN32
+    // Build command line: "Sandbox.exe" <args>
+    std::wstring cmd = L"\"" + sandboxExe.wstring() + L"\"";
+    if (!extraArgs.empty()) {
+        cmd += L" ";
+        cmd += std::wstring(extraArgs.begin(), extraArgs.end());
+    }
+
+    // CreateProcessW needs mutable buffer
+    std::vector<wchar_t> cmdBuf(cmd.begin(), cmd.end());
+    cmdBuf.push_back(L'\0');
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+
+    // Keep working directory same as Editor (important for Assets/ relative paths)
+    std::filesystem::path workDir = std::filesystem::current_path();
+
+    BOOL ok = CreateProcessW(
+        nullptr,
+        cmdBuf.data(),
+        nullptr, nullptr,
+        FALSE,
+        CREATE_NEW_CONSOLE,
+        nullptr,
+        workDir.wstring().c_str(),
+        &si, &pi
+    );
+
+    if (!ok) {
+        DWORD err = GetLastError();
+        outError = "CreateProcess failed (GetLastError=" + std::to_string(err) + ")";
+        return false;
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return true;
+#else
+    // very simple fallback
+    std::string cmdLine = "\"" + sandboxExe.string() + "\" " + extraArgs + " &";
+    int r = std::system(cmdLine.c_str());
+    if (r != 0) { outError = "system() failed"; return false; }
+    return true;
+#endif
+}
+
 int main() {
     auto window = Window::Create({ "Engine3D Editor", 1600, 900 });
     GLFWwindow* native = (GLFWwindow*)window->GetNativeWindow();
@@ -503,7 +585,7 @@ int main() {
 
     // -------- Undo/Selection State --------
     EditorUndo::CommandStack cmdStack;
-    UUID selectedUUID = 0;
+    Engine::UUID selectedUUID = 0;
     uint32_t selectedPickID = 0;
     Entity selectedEntity{};
 
@@ -535,7 +617,7 @@ int main() {
         pipeline.SetSelectedID(selectedPickID);
         };
 
-    auto SelectByUUID = [&](UUID id) {
+    auto SelectByUUID = [&](Engine::UUID id) {
         selectedUUID = id;
         SyncSelection();
         };
@@ -667,6 +749,26 @@ int main() {
                     if (ImGui::MenuItem("Set As Startup Scene")) {
                         if (!sceneMgr.GetCurrentPath().empty()) {
                             EditorProject::SaveStartupScene(sceneMgr.GetCurrentPath());
+                        }
+                    }
+
+                    if (ImGui::MenuItem("Play (Launch Sandbox)")) {
+                        std::string err;
+
+                        // Optional: if you want to auto-save before running:
+                        // if (sceneMgr.IsDirty()) sceneMgr.Save();
+
+                        // Optional: pass scene path as an argument (see Sandbox section below)
+                        // std::string args = "--scene \"" + sceneMgr.GetCurrentPath() + "\"";
+                        std::string args = ""; // no args for now
+
+                        if (LaunchSandboxExe(args, err)) {
+                            statusText = "Launched Sandbox.";
+                            statusTimer = 2.0f;
+                        }
+                        else {
+                            statusText = "Launch failed: " + err;
+                            statusTimer = 4.0f;
                         }
                     }
 
@@ -1029,7 +1131,7 @@ int main() {
                     if (view.begin() != view.end()) {
                         // delete first existing spawn point (or all)
                         auto enttHandle = *view.begin();
-                        UUID id = view.get<IDComponent>(enttHandle).ID;
+                        Engine::UUID id = view.get<IDComponent>(enttHandle).ID;
 
                         Entity old = scene.FindEntityByUUID(id);
                         if (old) {
@@ -1073,7 +1175,7 @@ int main() {
         // --- Hierarchy ---
         {
             ImGui::Begin("Hierarchy");
-            UUID requestDeleteUUID = 0;
+            Engine::UUID requestDeleteUUID = 0;
 
             //if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedUUID != 0) {
             //    requestDeleteUUID = selectedUUID;
@@ -1350,7 +1452,7 @@ int main() {
             }
 
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D) && selectedEntity) {
-                UUID newID = GenerateUUID();
+                Engine::UUID newID = GenerateUUID();
                 auto snap = EditorUndo::MakeDuplicateSnapshot(scene, selectedEntity, newID);
                 cmdStack.Execute(scene, std::make_unique<EditorUndo::CreateEntityCommand>(snap));
                 sceneMgr.MarkDirty();
