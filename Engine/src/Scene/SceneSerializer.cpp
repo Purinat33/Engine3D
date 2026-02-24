@@ -74,8 +74,8 @@ namespace Engine {
                 // DirectionalLight (optional)
                 if (reg.any_of<DirectionalLightComponent>(entity)) {
                     const auto& lc = reg.get<DirectionalLightComponent>(entity);
-                    e["DirectionalLight"]["Direction"] = Vec3ToJson(lc.Direction);
                     e["DirectionalLight"]["Color"] = Vec3ToJson(lc.Color);
+                    // Direction comes from Transform rotation; don't serialize lc.Direction
                 }
 
                 // Spawn
@@ -159,8 +159,12 @@ namespace Engine {
                 // DirectionalLight
                 if (e.contains("DirectionalLight")) {
                     const auto& dl = e["DirectionalLight"];
-                    glm::vec3 dir = dl.contains("Direction") ? JsonToVec3(dl["Direction"]) : glm::vec3(0.4f, 0.8f, -0.3f);
                     glm::vec3 col = dl.contains("Color") ? JsonToVec3(dl["Color"]) : glm::vec3(1.0f);
+
+                    // Direction will be derived from Transform rotation at runtime,
+                    // but keep a reasonable default for the component field:
+                    glm::vec3 dir = glm::vec3(0.4f, 0.8f, -0.3f);
+
                     ent.AddComponent<DirectionalLightComponent>(dir, col);
                 }
 

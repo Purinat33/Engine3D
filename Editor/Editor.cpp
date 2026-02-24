@@ -44,6 +44,8 @@
 #include <cstddef>
 #include <string>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 using namespace Engine;
 
 enum class GizmoMode { None, Translate, Rotate, Scale };
@@ -283,6 +285,16 @@ static glm::vec3 EulerFromForward(const glm::vec3& fwd) {
     float pitch = std::asin(glm::clamp(f.y, -1.0f, 1.0f));
     return glm::vec3(pitch, yaw, 0.0f);
 }
+
+//glm::mat4 markerAxisFix = glm::rotate(glm::mat4(1.0f),
+//    glm::radians(90.0f),
+//    glm::vec3(1, 0, 0)); // +90° around X
+//
+//glm::mat4 markerFlipZ =
+//glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0)); // +Z -> -Z
+static const glm::mat4 markerFix =
+glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1, 0, 0)); // +Y -> -Z
+
 
 int main() {
     auto window = Window::Create({ "Engine3D Editor", 1600, 900 });
@@ -1239,7 +1251,10 @@ int main() {
             {
                 auto view = reg.view<TransformComponent, DirectionalLightComponent>();
                 view.each([&](auto, TransformComponent& tc, DirectionalLightComponent&) {
-                    glm::mat4 xform = tc.GetTransform() * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+                    glm::mat4 xform =
+                        tc.GetTransform()
+                        * markerFix
+                        * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
                     SubmitModel(markerLight, xform);
                     });
             }
@@ -1248,7 +1263,10 @@ int main() {
             {
                 auto view = reg.view<TransformComponent, SpawnPointComponent>();
                 view.each([&](auto, TransformComponent& tc, SpawnPointComponent&) {
-                    glm::mat4 xform = tc.GetTransform() * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+                    glm::mat4 xform =
+                        tc.GetTransform()
+                        * markerFix
+                        * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
                     SubmitModel(markerSpawn, xform);
                     });
             }
@@ -1257,7 +1275,10 @@ int main() {
             {
                 auto view = reg.view<TransformComponent, SceneWarpComponent>();
                 view.each([&](auto, TransformComponent& tc, SceneWarpComponent&) {
-                    glm::mat4 xform = tc.GetTransform() * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+                    glm::mat4 xform =
+                        tc.GetTransform()
+                        * markerFix
+                        * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
                     SubmitModel(markerWarp, xform);
                     });
             }

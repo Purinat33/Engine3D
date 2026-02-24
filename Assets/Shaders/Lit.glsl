@@ -88,7 +88,7 @@ void main() {
     if (u_UseTexture == 1)
         albedo *= texture(u_Texture0, v_TexCoord).rgb;
 
-    vec3 N = normalize(v_NormalWS);
+vec3 N = normalize(v_NormalWS);
 vec3 L = normalize(-u_LightDir);
 
 float ndl = max(dot(N, L), 0.0);
