@@ -292,9 +292,15 @@ static glm::vec3 EulerFromForward(const glm::vec3& fwd) {
 //
 //glm::mat4 markerFlipZ =
 //glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0, 1, 0)); // +Z -> -Z
+
+
+//static const glm::mat4 markerFix =
+//glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1, 0, 0)); // +Y -> -Z
+
+//static const glm::mat4 markerFix = glm::mat4(1.0f);
+
 static const glm::mat4 markerFix =
 glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1, 0, 0)); // +Y -> -Z
-
 
 int main() {
     auto window = Window::Create({ "Engine3D Editor", 1600, 900 });
@@ -457,6 +463,9 @@ int main() {
         auto now = std::chrono::high_resolution_clock::now();
         float dt = std::chrono::duration<float>(now - last).count();
         last = now;
+
+        std::vector<GizmoVertex> lightDebugVerts;
+        lightDebugVerts.reserve(256);
 
         UpdateWindowTitle(native, sceneMgr.GetDisplayName(), sceneMgr.IsDirty());
 
@@ -1251,11 +1260,46 @@ int main() {
             {
                 auto view = reg.view<TransformComponent, DirectionalLightComponent>();
                 view.each([&](auto, TransformComponent& tc, DirectionalLightComponent&) {
+
+                    // 1) Compute the same direction your runtime uses (from tc.Rotation)
+                    glm::vec3 dir{
+                        cosf(tc.Rotation.x) * sinf(tc.Rotation.y),
+                        sinf(tc.Rotation.x),
+                        -cosf(tc.Rotation.x) * cosf(tc.Rotation.y)
+                    };
+                    dir = glm::normalize(dir);
+
+                    // 2) Build a marker transform that points along that direction
+                    glm::vec3 euler = EulerFromForward(dir); // (pitch, yaw, 0)
+
+                    // Option A: using yawPitchRoll (needs <glm/gtx/euler_angles.hpp>)
+                    glm::mat4 markerWorld =
+                        glm::translate(glm::mat4(1.0f), tc.Translation) *
+                        glm::rotate(glm::mat4(1.0f), euler.y, glm::vec3(0, 1, 0)) * // yaw
+                        glm::rotate(glm::mat4(1.0f), euler.x, glm::vec3(1, 0, 0));  // pitch
+
+                    // 3) Apply model-axis fix (markerFix) and scale
                     glm::mat4 xform =
-                        tc.GetTransform()
-                        * markerFix
-                        * glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+                        markerWorld *
+                        markerFix *
+                        glm::scale(glm::mat4(1.0f), glm::vec3(0.75f));
+
                     SubmitModel(markerLight, xform);
+
+                    // 4) Debug arrow line (TRUE light direction)
+                    AddArrow(lightDebugVerts, tc.Translation, dir, glm::vec3(1, 1, 0), 3.0f, 0.5f, 0.2f);
+                    glm::mat3 R = glm::mat3(xform);
+
+// GLM matrices are column-major: R[0],R[1],R[2] are the basis vectors in world space
+glm::vec3 worldX = glm::normalize(glm::vec3(R[0]));
+glm::vec3 worldY = glm::normalize(glm::vec3(R[1]));
+glm::vec3 worldZ = glm::normalize(glm::vec3(R[2]));
+
+// draw axes from the marker origin
+AddArrow(lightDebugVerts, tc.Translation, worldX, glm::vec3(1,0,0), 2.0f, 0.3f, 0.15f); // X red
+AddArrow(lightDebugVerts, tc.Translation, worldY, glm::vec3(0,1,0), 2.0f, 0.3f, 0.15f); // Y green
+AddArrow(lightDebugVerts, tc.Translation, worldZ, glm::vec3(0,0,1), 2.0f, 0.3f, 0.15f); // Z blue
+AddArrow(lightDebugVerts, tc.Translation, dir,    glm::vec3(1,1,0), 3.0f, 0.5f, 0.2f);   // Light dir yellow
                     });
             }
 
@@ -1284,6 +1328,18 @@ int main() {
             }
 
             Renderer::EndScene();
+
+            // Draw light debug arrows (line shader)
+            if (!lightDebugVerts.empty()) {
+                // Choose whether you want them depth-tested:
+                glEnable(GL_DEPTH_TEST);    // ON = arrows can be hidden behind geometry
+                // glDisable(GL_DEPTH_TEST); // OFF = always visible
+
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+                gizmoRenderer.Draw(editorCam.GetCamera(), lightDebugVerts, 1.0f);
+            }
 
             glDisable(GL_BLEND);
             pipeline.EndOverlayPass();
