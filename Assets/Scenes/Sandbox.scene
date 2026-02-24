@@ -26,12 +26,13 @@
       }
     },
     {
-      "ID": 1280582943552269028,
-      "MeshRenderer": {
-        "ModelPath": "Assets/Models/monkey.obj",
-        "ShaderPath": "Assets/Shaders/Lit.glsl"
+      "ID": 6788571828335662933,
+      "SceneWarp": {
+        "TargetScene": "Assets/Scenes/Test1.scene",
+        "TargetSpawnTag": "",
+        "TriggerRadius": 1.0
       },
-      "Tag": "Monkey Copy",
+      "Tag": "SceneWarp",
       "Transform": {
         "Rotation": [
           0.0,
@@ -44,7 +45,85 @@
           1.0
         ],
         "Translation": [
-          -3.415921926498413,
+          -3.124000072479248,
+          0.7419999837875366,
+          1.1230000257492065
+        ]
+      }
+    },
+    {
+      "ID": 16518012857392670626,
+      "SpawnPoint": true,
+      "Tag": "SpawnPoint",
+      "Transform": {
+        "Rotation": [
+          -1.8720005750656128,
+          -6.100404739379883,
+          -0.35999998450279236
+        ],
+        "Scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Translation": [
+          4.4613237380981445,
+          3.320798873901367,
+          3.091365337371826
+        ]
+      }
+    },
+    {
+      "DirectionalLight": {
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "ID": 15866449738409287489,
+      "Tag": "DirectionalLight",
+      "Transform": {
+        "Rotation": [
+          1.0121968984603882,
+          0.9272952079772949,
+          0.0
+        ],
+        "Scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Translation": [
+          -1.3513638973236084,
+          1.9682371616363525,
+          2.4410276412963867
+        ]
+      }
+    },
+    {
+      "DirectionalLight": {
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "ID": 11220316508858700379,
+      "Tag": "SunLight",
+      "Transform": {
+        "Rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Scale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Translation": [
+          0.0,
           0.0,
           0.0
         ]
@@ -76,20 +155,12 @@
       }
     },
     {
-      "DirectionalLight": {
-        "Color": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "Direction": [
-          0.4000000059604645,
-          0.800000011920929,
-          -0.30000001192092896
-        ]
+      "ID": 1280582943552269028,
+      "MeshRenderer": {
+        "ModelPath": "Assets/Models/monkey.obj",
+        "ShaderPath": "Assets/Shaders/Lit.glsl"
       },
-      "ID": 11220316508858700379,
-      "Tag": "SunLight",
+      "Tag": "Monkey Copy",
       "Transform": {
         "Rotation": [
           0.0,
@@ -102,64 +173,9 @@
           1.0
         ],
         "Translation": [
-          0.0,
+          -3.415921926498413,
           0.0,
           0.0
-        ]
-      }
-    },
-    {
-      "DirectionalLight": {
-        "Color": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "Direction": [
-          0.4000000059604645,
-          0.800000011920929,
-          -0.30000001192092896
-        ]
-      },
-      "ID": 15866449738409287489,
-      "Tag": "DirectionalLight",
-      "Transform": {
-        "Rotation": [
-          1.0121968984603882,
-          0.9272952079772949,
-          0.0
-        ],
-        "Scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "Translation": [
-          -1.3513638973236084,
-          1.9682371616363525,
-          2.4410276412963867
-        ]
-      }
-    },
-    {
-      "ID": 16518012857392670626,
-      "SpawnPoint": true,
-      "Tag": "SpawnPoint",
-      "Transform": {
-        "Rotation": [
-          -1.8720005750656128,
-          -6.100404739379883,
-          -0.35999998450279236
-        ],
-        "Scale": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "Translation": [
-          4.4613237380981445,
-          3.320798873901367,
-          3.091365337371826
         ]
       }
     }

@@ -60,7 +60,8 @@ namespace Engine {
 
     struct SceneWarpComponent {
         std::string TargetScene = "Assets/Scenes/Sandbox.scene";
-        std::string TargetSpawnTag = ""; // optional, for later
+        std::string TargetSpawnTag = "";     // optional
+        float TriggerRadius = 1.0f;          // NEW: meters
     };
 
 } // namespace Engine

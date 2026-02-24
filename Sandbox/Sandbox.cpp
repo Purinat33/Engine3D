@@ -235,6 +235,95 @@ static glm::vec3 ResolveCameraSphereVsScene(
     return pWS;
 }
 
+// Warp Helpers
+static bool ApplySpawn(Scene& scene, CameraController& cam, const std::string& preferredTag)
+{
+    auto& reg = scene.Registry();
+
+    // If tag is provided, try to find that entity tag
+    if (!preferredTag.empty()) {
+        auto view = reg.view<TagComponent, TransformComponent, SpawnPointComponent>();
+        for (auto e : view) {
+            auto& tag = view.get<TagComponent>(e).Tag;
+            if (tag == preferredTag) {
+                auto& tc = view.get<TransformComponent>(e);
+                cam.SetTransform(tc.Translation, tc.Rotation.y, tc.Rotation.x);
+                return true;
+            }
+        }
+    }
+
+    // Fallback: "SpawnPoint" tag or first spawnpoint
+    {
+        auto view = reg.view<TagComponent, TransformComponent, SpawnPointComponent>();
+        entt::entity chosen = entt::null;
+
+        for (auto e : view) {
+            const auto& tag = view.get<TagComponent>(e).Tag;
+            if (tag == "SpawnPoint") { chosen = e; break; }
+            if (chosen == entt::null) chosen = e;
+        }
+
+        if (chosen != entt::null) {
+            auto& tc = view.get<TransformComponent>(chosen);
+            cam.SetTransform(tc.Translation, tc.Rotation.y, tc.Rotation.x);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool TryWarp(Scene& scene, CameraController& cam, float dt)
+{
+    static float cooldown = 0.0f;
+    static UUID lastWarpID = 0;
+
+    if (cooldown > 0.0f) cooldown -= dt;
+
+    auto& reg = scene.Registry();
+    auto view = reg.view<IDComponent, TransformComponent, SceneWarpComponent>();
+
+    glm::vec3 camPos = cam.GetPosition();
+
+    for (auto e : view) {
+        auto& idc = view.get<IDComponent>(e);
+        auto& tc = view.get<TransformComponent>(e);
+        auto& sw = view.get<SceneWarpComponent>(e);
+
+        float r = std::max(0.05f, sw.TriggerRadius);
+        glm::vec3 d = camPos - tc.Translation;
+        if (glm::dot(d, d) > r * r) continue;
+
+        // Prevent instant re-trigger (ping-pong / spawn inside warp)
+        if (cooldown > 0.0f && idc.ID == lastWarpID)
+            continue;
+
+        if (sw.TargetScene.empty())
+            continue;
+
+        SceneSerializer serializer(scene);
+        if (!serializer.Deserialize(sw.TargetScene)) {
+            std::cout << "[Warp] Failed to load target scene: " << sw.TargetScene << "\n";
+            cooldown = 0.5f;
+            lastWarpID = idc.ID;
+            return true; // “handled” this frame
+        }
+
+        // After loading the new scene, apply spawn (optional tag)
+        ApplySpawn(scene, cam, sw.TargetSpawnTag);
+
+        // Cooldown to prevent immediate re-trigger
+        cooldown = 0.75f;
+        lastWarpID = idc.ID;
+
+        std::cout << "[Warp] Loaded: " << sw.TargetScene << "\n";
+        return true;
+    }
+
+    return false;
+}
+
 int main() {
     auto window = Window::Create({ "Engine3D - Sandbox", 1280, 720 });
 
@@ -396,6 +485,13 @@ int main() {
         uint32_t w = window->GetWidth();
         uint32_t h = window->GetHeight();
         if (w == 0 || h == 0) {
+            window->OnUpdate();
+            continue;
+        }
+
+        // NOW try warp BEFORE building shadows / rendering
+        if (TryWarp(scene, cam, dt)) {
+            // scene got replaced; skip this frame so everything recomputes clean next frame
             window->OnUpdate();
             continue;
         }

@@ -1050,28 +1050,21 @@ int main() {
             }
 
             if (ImGui::MenuItem("Scene Warp")) {
-                {
-                    auto view = scene.Registry().view<SceneWarpComponent>();
-                    int count = 0;
-                    for (auto e : view) (void)e, ++count;
+                auto view = scene.Registry().view<SceneWarpComponent>();
+                int count = 0;
+                for (auto e : view) (void)e, ++count;
 
-                    if (count >= 2) {
-                        statusText = "Only 2 SceneWarps allowed for now.";
-                        statusTimer = 2.5f;
-                    }
-                    else {
-                        Entity e = scene.CreateEntity("SceneWarp");
-                        e.AddComponent<SceneWarpComponent>();
-                        e.GetComponent<TransformComponent>().Translation =
-                            editorCam.GetPosition() + editorCam.GetForward() * 2.0f;
-                        sceneMgr.MarkDirty();
-                    }
+                if (count >= 2) {
+                    statusText = "Only 2 SceneWarps allowed for now.";
+                    statusTimer = 2.5f;
                 }
-                Entity e = scene.CreateEntity("SceneWarp");
-                e.AddComponent<SceneWarpComponent>(); // default target set in component
-                e.GetComponent<TransformComponent>().Translation =
-                    editorCam.GetPosition() + editorCam.GetForward() * 2.0f;
-                sceneMgr.MarkDirty();
+                else {
+                    Entity e = scene.CreateEntity("SceneWarp");
+                    e.AddComponent<SceneWarpComponent>();
+                    e.GetComponent<TransformComponent>().Translation =
+                        editorCam.GetPosition() + editorCam.GetForward() * 2.0f;
+                    sceneMgr.MarkDirty();
+                }
             }
 
             ImGui::EndMenu();
@@ -1212,11 +1205,37 @@ int main() {
                     ImGui::Text("Scene Warp");
                     auto& sw = selectedEntity.GetComponent<SceneWarpComponent>();
 
-                    static char targetBuf[260];
-                    std::snprintf(targetBuf, sizeof(targetBuf), "%s", sw.TargetScene.c_str());
+                    // Source (current scene)
+                    ImGui::TextDisabled("From Scene:");
+                    ImGui::SameLine();
+                    ImGui::TextUnformatted(sceneMgr.GetCurrentPath().c_str());
 
-                    if (ImGui::InputText("Target Scene", targetBuf, sizeof(targetBuf))) {
-                        sw.TargetScene = targetBuf;
+                    // Destination scene dropdown
+                    const auto& scenes = sceneMgr.GetSceneList();
+                    const char* preview = sw.TargetScene.empty() ? "<None>" : sw.TargetScene.c_str();
+
+                    if (ImGui::BeginCombo("To Scene", preview)) {
+                        for (const auto& s : scenes) {
+                            bool selected = (s == sw.TargetScene);
+                            if (ImGui::Selectable(s.c_str(), selected)) {
+                                sw.TargetScene = s;
+                                sceneMgr.MarkDirty();
+                            }
+                            if (selected) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+
+                    // Optional spawn tag
+                    static char spawnTagBuf[128];
+                    std::snprintf(spawnTagBuf, sizeof(spawnTagBuf), "%s", sw.TargetSpawnTag.c_str());
+                    if (ImGui::InputText("To Spawn Tag", spawnTagBuf, sizeof(spawnTagBuf))) {
+                        sw.TargetSpawnTag = spawnTagBuf;
+                        sceneMgr.MarkDirty();
+                    }
+
+                    // Trigger radius
+                    if (ImGui::DragFloat("Trigger Radius", &sw.TriggerRadius, 0.05f, 0.1f, 50.0f, "%.2f m")) {
                         sceneMgr.MarkDirty();
                     }
                 }
