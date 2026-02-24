@@ -109,11 +109,6 @@ namespace Engine {
 
                 Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), world);
             }
-
-            for (const auto& sm : model->GetSubMeshes()) {
-                if (!sm.MeshPtr || !sm.MaterialPtr) continue;
-                Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), world);
-            }
             });
     }
 
@@ -201,6 +196,47 @@ namespace Engine {
             dst.AddComponent<SceneWarpComponent>(src.GetComponent<SceneWarpComponent>());
 
         return dst;
+    }
+
+    bool Scene::GetMainDirectionalLight(glm::vec3& outDir, glm::vec3& outColor) {
+        auto view = m_Registry.view<TransformComponent, DirectionalLightComponent>();
+        for (auto e : view) {
+            auto& tc = view.get<TransformComponent>(e);
+            auto& dl = view.get<DirectionalLightComponent>(e);
+
+            glm::vec3 dir{
+                cosf(tc.Rotation.x) * sinf(tc.Rotation.y),
+                sinf(tc.Rotation.x),
+                -cosf(tc.Rotation.x) * cosf(tc.Rotation.y)
+            };
+            if (glm::length(dir) < 0.0001f) dir = dl.Direction;
+
+            outDir = glm::normalize(dir);
+            outColor = dl.Color;
+
+            dl.Direction = outDir; // keep synced
+            return true;
+        }
+        return false;
+    }
+
+    void Scene::OnRenderShadow(const std::shared_ptr<Material>& shadowDepthMat) {
+        auto& assets = AssetManager::Get();
+        auto renderView = m_Registry.view<TransformComponent, MeshRendererComponent>();
+
+        renderView.each([&](auto, TransformComponent& tc, MeshRendererComponent& mrc) {
+            if (mrc.Model == InvalidAssetHandle) return;
+
+            auto model = assets.GetModel(mrc.Model);
+            if (!model) return;
+
+            glm::mat4 world = tc.GetTransform();
+
+            for (const auto& sm : model->GetSubMeshes()) {
+                if (!sm.MeshPtr) continue;
+                Renderer::Submit(shadowDepthMat, sm.MeshPtr->GetVertexArray(), world);
+            }
+            });
     }
 
 } // namespace Engine

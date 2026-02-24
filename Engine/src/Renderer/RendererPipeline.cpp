@@ -174,4 +174,63 @@ namespace Engine {
         // no-op; scene FB stays bound until Compose() binds its own FB anyway
     }
 
+    void RendererPipeline::EnsureShadowResources(uint32_t shadowSize) {
+        m_ShadowSize = shadowSize;
+
+        if (m_ShadowFBO == 0) glGenFramebuffers(1, &m_ShadowFBO);
+        if (m_ShadowDepthTex == 0) glGenTextures(1, &m_ShadowDepthTex);
+
+        glBindTexture(GL_TEXTURE_2D, m_ShadowDepthTex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, m_ShadowSize, m_ShadowSize, 0,
+            GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        float border[4] = { 1,1,1,1 };
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, m_ShadowFBO);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_ShadowDepthTex, 0);
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        if (!m_ShadowDepthShader) {
+            m_ShadowDepthShader = std::make_shared<Shader>("Assets/Shaders/ShadowDepth.shader");
+            m_ShadowDepthMaterial = std::make_shared<Material>(m_ShadowDepthShader);
+        }
+    }
+
+    void RendererPipeline::BeginShadowPass(uint32_t shadowSize, const glm::mat4& lightViewProj) {
+        EnsureShadowResources(shadowSize);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, m_ShadowFBO);
+        RenderCommand::SetViewport(0, 0, m_ShadowSize, m_ShadowSize);
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        glEnable(GL_DEPTH_TEST);
+
+        // helps reduce acne on many meshes
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_FRONT);
+
+        Renderer::BeginScene(lightViewProj);
+        m_ShadowPassActive = true;
+    }
+
+    void RendererPipeline::EndShadowPass() {
+        if (!m_ShadowPassActive) return;
+
+        Renderer::EndScene();
+        m_ShadowPassActive = false;
+
+        // restore
+        glCullFace(GL_BACK);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
 } // namespace Engine

@@ -4,6 +4,7 @@
 #include "Engine/Renderer/RenderCommand.h"
 #include "Engine/Renderer/Shader.h"
 #include "Engine/Renderer/VertexArray.h"
+#include "Engine/Renderer/Buffer.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
 #include "Engine/Renderer/Texture2D.h"
 #include "Engine/Renderer/Material.h"
@@ -47,6 +48,10 @@ namespace Engine {
     glm::vec3 Renderer::s_DirLightDir = glm::vec3(0.4f, 0.8f, -0.3f);
     glm::vec3 Renderer::s_DirLightColor = glm::vec3(1.0f);
 
+
+    bool Renderer::s_HasShadows = false;
+    uint32_t Renderer::s_ShadowMapTex = 0;
+    glm::mat4 Renderer::s_LightSpaceMatrix = glm::mat4(1.0f);
 
     void Renderer::Init() {
         RenderCommand::Init();
@@ -118,6 +123,20 @@ namespace Engine {
                 restoreCull = true;
             }
 
+            // ---- Shadows (bind to a high slot to avoid colliding with material textures) ----
+            constexpr uint32_t ShadowSlot = 15;
+
+            shader->SetInt("u_UseShadows", s_HasShadows ? 1 : 0);
+            if (s_HasShadows) {
+                shader->SetMat4("u_LightSpaceMatrix", glm::value_ptr(s_LightSpaceMatrix));
+
+                glActiveTexture(GL_TEXTURE0 + ShadowSlot);
+                glBindTexture(GL_TEXTURE_2D, s_ShadowMapTex);
+                shader->SetInt("u_ShadowMap", (int)ShadowSlot);
+
+                shader->SetFloat("u_ShadowBias", 0.0015f); // tweak later
+            }
+
             RenderCommand::DrawIndexed(count);
 
             if (restoreCull)
@@ -175,17 +194,40 @@ namespace Engine {
     void Renderer::DrawSkybox(const PerspectiveCamera& camera) {
         if (!s_SkyboxTex || !s_SkyboxShader || !s_SkyboxVAO) return;
 
-        GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
-        if (cullWasEnabled) glDisable(GL_CULL_FACE);
+        // Cache uniform location once per program
+        static GLuint cachedProgram = 0;
+        static GLint  uVP_NoTranslate = -1;
+        static bool   printed = false;
 
+        const GLuint program = s_SkyboxShader->GetRendererID();
+        if (program != cachedProgram || uVP_NoTranslate == -1) {
+            cachedProgram = program;
+            uVP_NoTranslate = glGetUniformLocation(program, "u_ViewProjectionNoTranslate");
+
+            // Print ONCE (optional)
+            if (!printed) {
+                std::cout << "[Skybox] u_ViewProjectionNoTranslate loc = " << uVP_NoTranslate << "\n";
+                printed = true;
+            }
+        }
+
+        // Save states we touch
+        GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+        GLint oldDepthFunc; glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunc);
+        GLboolean oldDepthMask; glGetBooleanv(GL_DEPTH_WRITEMASK, &oldDepthMask);
+
+        // Skybox state: depth test should pass at far plane, don't write depth
+        if (cullWasEnabled) glDisable(GL_CULL_FACE);
         glDepthFunc(GL_LEQUAL);
         glDepthMask(GL_FALSE);
 
         s_SkyboxShader->Bind();
-        int loc = glGetUniformLocation(s_SkyboxShader->GetRendererID(), "u_ViewProjectionNoTranslate");
-        std::cout << "[Skybox] VP loc = " << loc << "\n";
+
+        // Remove translation from view matrix
         glm::mat4 view = glm::mat4(glm::mat3(camera.GetView()));
         glm::mat4 vp = camera.GetProjection() * view;
+
+        // Set matrix (your Shader::SetMat4 already no-ops if loc == -1)
         s_SkyboxShader->SetMat4("u_ViewProjectionNoTranslate", glm::value_ptr(vp));
 
         s_SkyboxTex->Bind(0);
@@ -194,10 +236,27 @@ namespace Engine {
         s_SkyboxVAO->Bind();
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        glDepthMask(GL_TRUE);
-        glDepthFunc(GL_LESS);
-
+        // Restore states
+        glDepthMask(oldDepthMask);
+        glDepthFunc(oldDepthFunc);
         if (cullWasEnabled) glEnable(GL_CULL_FACE);
+    }
+
+    void Renderer::BeginScene(const glm::mat4& viewProjection) {
+        s_ViewProjection = viewProjection;
+        s_DrawList.clear();
+    }
+
+    void Renderer::SetShadowMap(uint32_t depthTex, const glm::mat4& lightSpace) {
+        s_HasShadows = (depthTex != 0);
+        s_ShadowMapTex = depthTex;
+        s_LightSpaceMatrix = lightSpace;
+    }
+
+    void Renderer::ClearShadowMap() {
+        s_HasShadows = false;
+        s_ShadowMapTex = 0;
+        s_LightSpaceMatrix = glm::mat4(1.0f);
     }
 
 } // namespace Engine

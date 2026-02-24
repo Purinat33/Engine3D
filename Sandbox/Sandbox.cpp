@@ -23,8 +23,29 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <array>
+#include <cmath>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 using namespace Engine;
+
+static glm::mat4 ComputeDirLightMatrix(const glm::vec3& lightDir, const glm::vec3& focusPoint) {
+    glm::vec3 dir = glm::normalize(lightDir);
+    glm::vec3 up = (std::abs(dir.y) > 0.99f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+
+    float dist = 40.0f;
+    glm::vec3 lightPos = focusPoint - dir * dist;
+
+    glm::mat4 lightView = glm::lookAt(lightPos, focusPoint, up);
+
+    float orthoSize = 30.0f;     // tweak
+    float nearPlane = 1.0f;
+    float farPlane = 120.0f;
+
+    glm::mat4 lightProj = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, nearPlane, farPlane);
+    return lightProj * lightView;
+}
 
 int main() {
     auto window = Window::Create({ "Engine3D - Sandbox", 1280, 720 });
@@ -179,9 +200,22 @@ int main() {
             continue;
         }
 
-        pipeline.BeginScenePass(w, h, cam.GetCamera());
+        glm::vec3 lightDir, lightColor;
+        bool hasLight = scene.GetMainDirectionalLight(lightDir, lightColor);
+        if (!hasLight) { lightDir = { 0.4f,0.8f,-0.3f }; lightColor = { 1,1,1 }; }
+
+        glm::mat4 lightSpace = ComputeDirLightMatrix(lightDir, cam.GetPosition()); // or camCtrl.GetPosition()
+
+        pipeline.BeginShadowPass(2048, lightSpace);
+        scene.OnRenderShadow(pipeline.GetShadowDepthMaterial());
+        pipeline.EndShadowPass();
+
         scene.OnUpdate(dt);
-        scene.OnRender(cam.GetCamera()); // submits only
+        pipeline.BeginScenePass(w, h, cam.GetCamera());
+        Renderer::SetDirectionalLight(lightDir, lightColor);
+        Renderer::SetShadowMap(pipeline.GetShadowDepthTexture(), lightSpace);
+
+        scene.OnRender(cam.GetCamera());
         pipeline.EndScenePass();
 
         pipeline.PresentToScreen();

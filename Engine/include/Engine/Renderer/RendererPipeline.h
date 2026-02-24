@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <cstdint>
+#include <glm/glm.hpp>
 
 namespace Engine {
 
@@ -41,11 +42,20 @@ namespace Engine {
         float m_Exposure = 1.0f;
         int   m_Tonemap = 2;     // ACES default
         float m_Vignette = 0.0f;
+
+        void BeginShadowPass(uint32_t shadowSize, const glm::mat4& lightViewProj);
+        void EndShadowPass();
+
+        uint32_t GetShadowDepthTexture() const { return m_ShadowDepthTex; }
+        std::shared_ptr<Material> GetShadowDepthMaterial() const { return m_ShadowDepthMaterial; }
+
     private:
         void EnsureSceneResources(uint32_t width, uint32_t height);
         void EnsurePickingResources(uint32_t width, uint32_t height);
         void EnsureCompositeResources(uint32_t width, uint32_t height);
         void DrawFullscreen(); // draws Screen.shader using Scene + ID
+        void EnsureShadowResources(uint32_t shadowSize);
+
 
     private:
         // Scene
@@ -65,6 +75,15 @@ namespace Engine {
         bool m_ScenePassActive = false;
         bool m_PickingPassActive = false;
         uint32_t m_SelectedID = 0;
+
+        uint32_t m_ShadowSize = 2048;
+        uint32_t m_ShadowFBO = 0;
+        uint32_t m_ShadowDepthTex = 0;
+
+        std::shared_ptr<Shader>   m_ShadowDepthShader;
+        std::shared_ptr<Material> m_ShadowDepthMaterial;
+
+        bool m_ShadowPassActive = false;
     };
 
 } // namespace Engine

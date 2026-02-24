@@ -235,5 +235,6 @@
     <None Include="..\Assets\Shaders\Skybox.shader">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="..\Assets\Shaders\ShadowDepth.shader" />
   </ItemGroup>
 </Project>

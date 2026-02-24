@@ -39,6 +39,17 @@ namespace Engine {
         static glm::vec3 s_DirLightDir;
         static glm::vec3 s_DirLightColor;
 
+        // --- Shadows ---
+        static bool s_HasShadows;
+        static uint32_t s_ShadowMapTex;
+        static glm::mat4 s_LightSpaceMatrix;
+
+        static void SetShadowMap(uint32_t depthTex, const glm::mat4& lightSpace);
+        static void ClearShadowMap();
+
+        // overload BeginScene so shadow pass can use an ortho VP
+        static void BeginScene(const glm::mat4& viewProjection);
+
         // Skybox
         static void SetSkybox(const std::shared_ptr<TextureCube>& sky);
         static void DrawSkybox(const PerspectiveCamera& camera);

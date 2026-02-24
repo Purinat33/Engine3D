@@ -6,6 +6,8 @@
 #include "Engine/Scene/Entity.h"
 #include "Engine/Scene/UUID.h"
 
+#include <glm/glm.hpp>
+
 namespace Engine {
 
     class PerspectiveCamera;
@@ -36,6 +38,9 @@ namespace Engine {
         void OnRenderPicking(const PerspectiveCamera& camera,
             const std::shared_ptr<Material>& idMaterial);
         
+        void OnRenderShadow(const std::shared_ptr<Material>& shadowDepthMat);
+        bool GetMainDirectionalLight(glm::vec3& outDir, glm::vec3& outColor);
+
     private:
         entt::registry m_Registry;
     };
