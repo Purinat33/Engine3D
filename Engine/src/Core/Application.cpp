@@ -16,6 +16,8 @@
 #include "Engine/Events/WindowFocusEvent.h"
 #include "Engine/Events/KeyEvent.h"
 
+#include "Engine/Renderer/TextureCube.h"
+
 #include <GLFW/glfw3.h>
 
 #include <chrono>
@@ -76,6 +78,16 @@ namespace Engine {
                 << " (cwd=" << std::filesystem::current_path().string() << ")\n";
         }
 
+        // Skybox for this scene (load once)
+        Renderer::SetSkybox(std::make_shared<TextureCube>(std::array<std::string, 6>{
+            "Assets/Skybox/px.png",
+                "Assets/Skybox/nx.png",
+                "Assets/Skybox/py.png",
+                "Assets/Skybox/ny.png",
+                "Assets/Skybox/pz.png",
+                "Assets/Skybox/nz.png"
+        }));
+        std::cout << "[Sandbox] Skybox set\n";
         // --- APPLY SPAWN POINT (if any) ---
         {
             auto view = scene.Registry().view<TagComponent, TransformComponent, SpawnPointComponent>();

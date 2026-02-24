@@ -14,6 +14,9 @@ namespace Engine {
 
         const glm::mat4& GetViewProjection() const { return m_ViewProjection; }
 
+        const glm::mat4& GetView() const { return m_View; }
+        const glm::mat4& GetProjection() const { return m_Projection; }
+
     private:
         void RecalculateProjection();
         void RecalculateView();

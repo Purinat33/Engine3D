@@ -178,6 +178,7 @@
     <ClInclude Include="include\Engine\Renderer\Shader.h" />
     <ClInclude Include="include\Engine\Renderer\ShaderLibrary.h" />
     <ClInclude Include="include\Engine\Renderer\Texture2D.h" />
+    <ClInclude Include="include\Engine\Renderer\TextureCube.h" />
     <ClInclude Include="include\Engine\Renderer\VertexArray.h" />
     <ClInclude Include="include\Engine\Scene\Components.h" />
     <ClInclude Include="include\Engine\Scene\Entity.h" />
@@ -218,6 +219,7 @@
     <ClCompile Include="src\Renderer\ShaderLibrary.cpp" />
     <ClCompile Include="src\Renderer\stb_image.cpp" />
     <ClCompile Include="src\Renderer\Texture2D.cpp" />
+    <ClCompile Include="src\Renderer\TextureCube.cpp" />
     <ClCompile Include="src\Renderer\VertexArray.cpp" />
     <ClCompile Include="src\Scene\Scene.cpp" />
     <ClCompile Include="src\Scene\SceneSerializer.cpp" />
@@ -229,6 +231,7 @@
     <None Include="..\Assets\Shaders\Lit.shader" />
     <None Include="..\Assets\Shaders\Screen.glsl" />
     <None Include="..\Assets\Shaders\Screen.shader" />
+    <None Include="..\Assets\Shaders\Skybox.shader" />
     <None Include="..\Assets\Shaders\Textured.glsl" />
     <None Include="vcpkg.json" />
   </ItemGroup>

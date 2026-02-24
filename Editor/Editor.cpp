@@ -32,6 +32,8 @@
 #include <Engine/Renderer/Texture2D.h>
 #include <Engine/Renderer/Model.h>
 
+#include "Engine/Renderer/TextureCube.h"
+
 #include <filesystem>
 #include <algorithm>
 
@@ -287,6 +289,16 @@ int main() {
     GLFWwindow* native = (GLFWwindow*)window->GetNativeWindow();
 
     Renderer::Init();
+
+    // Skybox
+    Renderer::SetSkybox(std::make_shared<TextureCube>(std::array<std::string, 6>{
+        "Assets/Skybox/px.png",
+            "Assets/Skybox/nx.png",
+            "Assets/Skybox/py.png",
+            "Assets/Skybox/ny.png",
+            "Assets/Skybox/pz.png",
+            "Assets/Skybox/nz.png"
+    }));
 
     // ImGui init
     IMGUI_CHECKVERSION();

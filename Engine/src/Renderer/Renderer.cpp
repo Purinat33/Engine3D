@@ -8,10 +8,35 @@
 #include "Engine/Renderer/Texture2D.h"
 #include "Engine/Renderer/Material.h"
 
+#include "Engine/Renderer/TextureCube.h"
+
 #include <algorithm>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <glad/glad.h>
+
+static std::shared_ptr<Engine::Shader> s_SkyboxShader;
+static std::shared_ptr<Engine::VertexArray> s_SkyboxVAO;
+static std::shared_ptr<Engine::TextureCube> s_SkyboxTex;
+
+static std::shared_ptr<Engine::VertexArray> CreateSkyboxCubeVAO() {
+    // 36 verts cube, positions only
+    float v[] = {
+        // ... (standard cube positions) ...
+        -1,-1,-1,  1,-1,-1,  1, 1,-1,  1, 1,-1, -1, 1,-1, -1,-1,-1,
+        -1,-1, 1,  1,-1, 1,  1, 1, 1,  1, 1, 1, -1, 1, 1, -1,-1, 1,
+        -1, 1, 1, -1, 1,-1, -1,-1,-1, -1,-1,-1, -1,-1, 1, -1, 1, 1,
+         1, 1, 1,  1, 1,-1,  1,-1,-1,  1,-1,-1,  1,-1, 1,  1, 1, 1,
+        -1,-1,-1,  1,-1,-1,  1,-1, 1,  1,-1, 1, -1,-1, 1, -1,-1,-1,
+        -1, 1,-1,  1, 1,-1,  1, 1, 1,  1, 1, 1, -1, 1, 1, -1, 1,-1
+    };
+
+    auto vao = std::make_shared<Engine::VertexArray>();
+    auto vb = std::make_shared<Engine::VertexBuffer>(v, sizeof(v));
+    vb->SetLayout({ { Engine::ShaderDataType::Float3 } });
+    vao->AddVertexBuffer(vb);
+    return vao;
+}
 
 namespace Engine {
 
@@ -139,6 +164,40 @@ namespace Engine {
         s_HasDirLight = false;
         s_DirLightDir = glm::vec3(0.4f, 0.8f, -0.3f);
         s_DirLightColor = glm::vec3(1.0f);
+    }
+
+    void Engine::Renderer::SetSkybox(const std::shared_ptr<TextureCube>& sky) {
+        s_SkyboxTex = sky;
+        if (!s_SkyboxShader) s_SkyboxShader = std::make_shared<Shader>("Assets/Shaders/Skybox.shader");
+        if (!s_SkyboxVAO)    s_SkyboxVAO = CreateSkyboxCubeVAO();
+    }
+
+    void Renderer::DrawSkybox(const PerspectiveCamera& camera) {
+        if (!s_SkyboxTex || !s_SkyboxShader || !s_SkyboxVAO) return;
+
+        GLboolean cullWasEnabled = glIsEnabled(GL_CULL_FACE);
+        if (cullWasEnabled) glDisable(GL_CULL_FACE);
+
+        glDepthFunc(GL_LEQUAL);
+        glDepthMask(GL_FALSE);
+
+        s_SkyboxShader->Bind();
+        int loc = glGetUniformLocation(s_SkyboxShader->GetRendererID(), "u_ViewProjectionNoTranslate");
+        std::cout << "[Skybox] VP loc = " << loc << "\n";
+        glm::mat4 view = glm::mat4(glm::mat3(camera.GetView()));
+        glm::mat4 vp = camera.GetProjection() * view;
+        s_SkyboxShader->SetMat4("u_ViewProjectionNoTranslate", glm::value_ptr(vp));
+
+        s_SkyboxTex->Bind(0);
+        s_SkyboxShader->SetInt("u_Skybox", 0);
+
+        s_SkyboxVAO->Bind();
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
+
+        if (cullWasEnabled) glEnable(GL_CULL_FACE);
     }
 
 } // namespace Engine

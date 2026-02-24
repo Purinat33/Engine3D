@@ -81,6 +81,8 @@ namespace Engine {
 
         Engine::Frustum fr = Engine::ExtractFrustum(camera.GetViewProjection());
 
+
+        Renderer::DrawSkybox(camera);
         // --- Render meshes (submit only; pipeline owns BeginScene/EndScene) ---
         auto renderView = m_Registry.view<TransformComponent, MeshRendererComponent>();
         renderView.each([&](auto /*entity*/, TransformComponent& tc, MeshRendererComponent& mrc) {

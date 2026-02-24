@@ -10,6 +10,7 @@ namespace Engine {
     class VertexArray;
     class PerspectiveCamera;
     class Material;
+    class TextureCube;
 
     class Renderer {
     public:
@@ -37,6 +38,10 @@ namespace Engine {
         static bool s_HasDirLight;
         static glm::vec3 s_DirLightDir;
         static glm::vec3 s_DirLightColor;
+
+        // Skybox
+        static void SetSkybox(const std::shared_ptr<TextureCube>& sky);
+        static void DrawSkybox(const PerspectiveCamera& camera);
 
     private:
         struct DrawCommand {
