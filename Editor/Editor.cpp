@@ -1270,13 +1270,14 @@ int main() {
                     dir = glm::normalize(dir);
 
                     // 2) Build a marker transform that points along that direction
-                    glm::vec3 euler = EulerFromForward(dir); // (pitch, yaw, 0)
+                    float yaw = -tc.Rotation.y;
+                    float pitch = tc.Rotation.x;
 
-                    // Option A: using yawPitchRoll (needs <glm/gtx/euler_angles.hpp>)
                     glm::mat4 markerWorld =
                         glm::translate(glm::mat4(1.0f), tc.Translation) *
-                        glm::rotate(glm::mat4(1.0f), euler.y, glm::vec3(0, 1, 0)) * // yaw
-                        glm::rotate(glm::mat4(1.0f), euler.x, glm::vec3(1, 0, 0));  // pitch
+                        glm::rotate(glm::mat4(1.0f), yaw, glm::vec3(0, 1, 0)) *
+                        glm::rotate(glm::mat4(1.0f), pitch, glm::vec3(1, 0, 0));
+
 
                     // 3) Apply model-axis fix (markerFix) and scale
                     glm::mat4 xform =
