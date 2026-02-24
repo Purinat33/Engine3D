@@ -263,10 +263,10 @@ namespace Engine {
         // glCullFace(GL_BACK);  // safer default
         // (then maybe GL_FRONT once it's working)
         glEnable(GL_CULL_FACE);
-        glCullFace(GL_FRONT); // common for shadow maps to reduce self-shadowing
+        glCullFace(GL_BACK); // common for shadow maps to reduce self-shadowing (FRONT OR BACK)
 
         glEnable(GL_POLYGON_OFFSET_FILL);
-        glPolygonOffset(2.0f, 4.0f); // tweak if needed
+        glPolygonOffset(1.0f, 2.0f); // tweak if needed
 
         Renderer::BeginScene(lightViewProj);
         m_ShadowPassActive = true;
