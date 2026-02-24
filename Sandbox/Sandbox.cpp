@@ -3,6 +3,7 @@
 #include <Engine/Renderer/Renderer.h>
 #include <Engine/Renderer/RendererPipeline.h>
 #include <Engine/Renderer/CameraController.h>
+#include <Engine/Renderer/Model.h>
 
 #include <Engine/Scene/Scene.h>
 #include <Engine/Scene/Components.h>
@@ -142,6 +143,96 @@ static glm::mat4 BuildCascadeLightMatrix(
 
     glm::mat4 lightProj = glm::ortho(minLS.x, maxLS.x, minLS.y, maxLS.y, nearPlane, farPlane);
     return lightProj * lightView;
+}
+
+static glm::vec3 ResolveCameraSphereVsScene(
+    Engine::Scene& scene,
+    const glm::vec3& desiredPos,
+    float camRadius)
+{
+    auto& assets = Engine::AssetManager::Get();
+    glm::vec3 pWS = desiredPos;
+
+    const float skin = 0.002f; // tiny gap to prevent jitter
+
+    for (int iter = 0; iter < 4; iter++) {
+        bool anyHit = false;
+
+        auto view = scene.Registry().view<Engine::TransformComponent, Engine::MeshRendererComponent>();
+        view.each([&](auto, Engine::TransformComponent& tc, Engine::MeshRendererComponent& mrc) {
+            if (mrc.Model == Engine::InvalidAssetHandle) return;
+
+            auto model = assets.GetModel(mrc.Model);
+            if (!model) return;
+
+            glm::mat4 world = tc.GetTransform();
+            glm::mat4 invWorld = glm::inverse(world);
+
+            // camera in local space of this entity
+            glm::vec3 pLS = glm::vec3(invWorld * glm::vec4(pWS, 1.0f));
+
+            for (const auto& sm : model->GetSubMeshes()) {
+                if (!sm.MeshPtr) continue;
+
+                const auto& b = sm.MeshPtr->GetBounds();
+
+                // IMPORTANT: you need b.Min and b.Max to exist for this
+                const glm::vec3 bmin = b.Min;
+                const glm::vec3 bmax = b.Max;
+
+                // closest point on AABB to sphere center
+                glm::vec3 q = glm::clamp(pLS, bmin, bmax);
+                glm::vec3 v = pLS - q;
+                float d2 = glm::dot(v, v);
+
+                if (d2 >= camRadius * camRadius)
+                    continue;
+
+                // If outside box, push out along v
+                if (d2 > 1e-10f) {
+                    float d = std::sqrt(d2);
+                    glm::vec3 n = v / d;
+                    pLS = q + n * (camRadius + skin);
+                }
+                else {
+                    // Sphere center is INSIDE the box => push to nearest face
+                    float toMinX = pLS.x - bmin.x;
+                    float toMaxX = bmax.x - pLS.x;
+                    float toMinY = pLS.y - bmin.y;
+                    float toMaxY = bmax.y - pLS.y;
+                    float toMinZ = pLS.z - bmin.z;
+                    float toMaxZ = bmax.z - pLS.z;
+
+                    float m = toMinX;
+                    int axis = 0; // 0=x,1=y,2=z
+                    int dir = -1; // -1 = toward min face, +1 = toward max face
+
+                    auto check = [&](float dist, int ax, int ddir) {
+                        if (dist < m) { m = dist; axis = ax; dir = ddir; }
+                        };
+
+                    check(toMaxX, 0, +1);
+                    check(toMinY, 1, -1);
+                    check(toMaxY, 1, +1);
+                    check(toMinZ, 2, -1);
+                    check(toMaxZ, 2, +1);
+
+                    if (axis == 0) pLS.x = (dir < 0) ? (bmin.x - camRadius - skin) : (bmax.x + camRadius + skin);
+                    if (axis == 1) pLS.y = (dir < 0) ? (bmin.y - camRadius - skin) : (bmax.y + camRadius + skin);
+                    if (axis == 2) pLS.z = (dir < 0) ? (bmin.z - camRadius - skin) : (bmax.z + camRadius + skin);
+                }
+
+                // update world-space camera position after a push
+                pWS = glm::vec3(world * glm::vec4(pLS, 1.0f));
+                anyHit = true;
+            }
+            });
+
+        if (!anyHit)
+            break;
+    }
+
+    return pWS;
 }
 
 int main() {
@@ -290,6 +381,18 @@ int main() {
             cam.OnUpdate(0.0f);
         }
 
+        // ---- Camera collision (do this BEFORE computing CSM / rendering) ----
+        {
+            glm::vec3 desired = cam.GetPosition();
+            const float camRadius = 0.30f; // tweak 0.25 - 0.40
+            glm::vec3 resolved = ResolveCameraSphereVsScene(scene, desired, camRadius);
+
+            glm::vec3 d = resolved - desired;
+            if (glm::dot(d, d) > 1e-10f) {
+                cam.SetPosition(resolved);
+            }
+        }
+
         uint32_t w = window->GetWidth();
         uint32_t h = window->GetHeight();
         if (w == 0 || h == 0) {
@@ -336,7 +439,6 @@ int main() {
         Renderer::SetDirectionalLight(lightDir, lightColor);
         Renderer::SetCSMShadowMap(pipeline.GetShadowDepthTextureArray(), lightMats, splits, CSM_CASCADES);
 
-        scene.OnUpdate(dt);
 
 
         scene.OnRender(cam.GetCamera());

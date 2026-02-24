@@ -6,11 +6,7 @@ namespace Engine {
 
     class CameraController {
     public:
-        
-        
-
         CameraController(float fovRadians, float aspect, float nearClip, float farClip);
-
 
         void OnUpdate(float dt);
 
@@ -21,7 +17,14 @@ namespace Engine {
         void SetMouseSensitivity(float s) { m_MouseSensitivity = s; }
         void SetActive(bool active) { m_Active = active; }
         bool IsActive() const { return m_Active; }
-        glm::vec3 GetPosition() const { return m_Position; }
+
+        const glm::vec3& GetPosition() const { return m_Position; }   // <-- ONLY ONE
+        void SetPosition(const glm::vec3& p) {
+            m_Position = p;
+            m_Camera.SetPosition(m_Position);
+            m_Camera.SetRotation(m_Yaw, m_Pitch);
+        }
+
         glm::vec3 GetForward() const;
         glm::vec3 GetRight() const;
 
