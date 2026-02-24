@@ -224,22 +224,48 @@ namespace Engine {
         m_ShadowCascadeCount = std::min<uint32_t>(cascadeCount, MaxCascades);
         EnsureShadowResources(shadowSize);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, m_ShadowFBO);
-        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-            m_ShadowDepthTexArray, 0, (int)cascadeIndex);
+        if (m_ShadowCascadeCount == 0)
+            return;
 
-        RenderCommand::SetViewport(0, 0, m_ShadowSize, m_ShadowSize);
-        glClear(GL_DEPTH_BUFFER_BIT);
+        // IMPORTANT: clamp layer index
+        cascadeIndex = std::min(cascadeIndex, m_ShadowCascadeCount - 1);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, m_ShadowFBO);
+
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+            m_ShadowDepthTexArray, 0, (GLint)cascadeIndex);
+
+        // IMPORTANT: verify the FBO is actually valid
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            // put your logging/assert here
+            // e.g. std::cout << "Shadow FBO incomplete: " << status << "\n";
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            return;
+        }
+
+        glViewport(0, 0, m_ShadowSize, m_ShadowSize);
+
+        glDisable(GL_BLEND);
 
         glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
 
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_FRONT); // reduce acne
+        // IMPORTANT: force clear depth to 1 (so a cleared map samples as white)
+        glClearDepth(1.0);
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        // DEBUG: disable culling until you see non-empty depth
+        glDisable(GL_CULL_FACE);
+        // later, re-enable and choose one:
+        // glEnable(GL_CULL_FACE);
+        // glCullFace(GL_BACK);  // safer default
+        // (then maybe GL_FRONT once it's working)
 
         Renderer::BeginScene(lightViewProj);
         m_ShadowPassActive = true;
     }
-
 
     void RendererPipeline::EndShadowPass() {
         if (!m_ShadowPassActive) return;
@@ -247,8 +273,9 @@ namespace Engine {
         Renderer::EndScene();
         m_ShadowPassActive = false;
 
-        // restore
+        glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 

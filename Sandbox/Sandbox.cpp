@@ -131,11 +131,16 @@ static glm::mat4 BuildCascadeLightMatrix(
     maxLS.y = minLS.y + texel * float(shadowSize);
 
     // Z range (add margin)
+// In GLM lookAt space, forward is -Z, so points in front have NEGATIVE z.
+// glm::ortho expects zNear/zFar as positive distances along the view direction.
+// Convert lightView-space z bounds to positive near/far.
     float zMargin = 50.0f;
-    float nearLS = minLS.z - zMargin;
-    float farLS = maxLS.z + zMargin;
 
-    glm::mat4 lightProj = glm::ortho(minLS.x, maxLS.x, minLS.y, maxLS.y, nearLS, farLS);
+    // maxLS.z is "closest" (least negative), minLS.z is "farthest" (most negative)
+    float nearPlane = std::max(0.1f, -maxLS.z - zMargin);
+    float farPlane = std::max(nearPlane + 1.0f, -minLS.z + zMargin);
+
+    glm::mat4 lightProj = glm::ortho(minLS.x, maxLS.x, minLS.y, maxLS.y, nearPlane, farPlane);
     return lightProj * lightView;
 }
 

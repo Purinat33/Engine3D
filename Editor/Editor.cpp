@@ -57,6 +57,10 @@ static std::string statusText;
 static float statusTimer = 0.0f;
 
 
+static constexpr int CSM_CASCADES = 4;
+static constexpr uint32_t SHADOW_SIZE = 2048;
+
+
 static const char* AxisName(AxisConstraint a) {
     switch (a) {
     case AxisConstraint::X: return "X";
@@ -74,6 +78,118 @@ static float SnapFloat(float v, float step) {
 static uint32_t FoldUUIDToPickID(UUID id) {
     uint32_t v = (uint32_t)(id ^ (id >> 32));
     return v == 0 ? 1u : v;
+}
+
+
+static glm::mat4 ComputeDirLightMatrix(const glm::vec3& lightDir, const glm::vec3& focusPoint) {
+    glm::vec3 dir = glm::normalize(lightDir);
+    glm::vec3 up = (std::abs(dir.y) > 0.99f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+
+    float dist = 40.0f;
+    glm::vec3 lightPos = focusPoint - dir * dist;
+
+    glm::mat4 lightView = glm::lookAt(lightPos, focusPoint, up);
+
+    float orthoSize = 30.0f;     // tweak
+    float nearPlane = 1.0f;
+    float farPlane = 120.0f;
+
+    glm::mat4 lightProj = glm::ortho(-orthoSize, orthoSize, -orthoSize, orthoSize, nearPlane, farPlane);
+    return lightProj * lightView;
+}
+
+static std::array<glm::vec3, 8> GetFrustumCornersWS(
+    const Engine::PerspectiveCamera& cam,
+    float nearPlane, float farPlane)
+{
+    // Rebuild a projection for this slice
+    glm::mat4 proj = glm::perspective(cam.GetFov(), cam.GetAspect(), nearPlane, farPlane);
+    glm::mat4 inv = glm::inverse(proj * cam.GetView());
+
+    std::array<glm::vec3, 8> corners{};
+    int idx = 0;
+
+    // OpenGL NDC z: -1 (near) to +1 (far)
+    for (int z = 0; z < 2; z++) {
+        float ndcZ = (z == 0) ? -1.0f : 1.0f;
+        for (int y = 0; y < 2; y++) {
+            float ndcY = (y == 0) ? -1.0f : 1.0f;
+            for (int x = 0; x < 2; x++) {
+                float ndcX = (x == 0) ? -1.0f : 1.0f;
+
+                glm::vec4 p = inv * glm::vec4(ndcX, ndcY, ndcZ, 1.0f);
+                corners[idx++] = glm::vec3(p) / p.w;
+            }
+        }
+    }
+    return corners;
+}
+
+static glm::mat4 BuildCascadeLightMatrix(
+    const Engine::PerspectiveCamera& cam,
+    const glm::vec3& lightDir,
+    float sliceNear, float sliceFar,
+    uint32_t shadowSize)
+{
+    glm::vec3 dir = glm::normalize(lightDir);
+    glm::vec3 up = (std::abs(dir.y) > 0.99f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+
+    auto corners = GetFrustumCornersWS(cam, sliceNear, sliceFar);
+
+    // Center of slice
+    glm::vec3 center(0.0f);
+    for (auto& c : corners) center += c;
+    center /= 8.0f;
+
+    // Choose a distance based on slice radius
+    float radius = 0.0f;
+    for (auto& c : corners) radius = std::max(radius, glm::length(c - center));
+
+    float lightDist = radius + 50.0f;
+    glm::vec3 lightPos = center - dir * lightDist;
+
+    glm::mat4 lightView = glm::lookAt(lightPos, center, up);
+
+    // Fit ortho bounds in light space
+    glm::vec3 minLS(FLT_MAX), maxLS(-FLT_MAX);
+    for (auto& c : corners) {
+        glm::vec4 ls = lightView * glm::vec4(c, 1.0f);
+        minLS = glm::min(minLS, glm::vec3(ls));
+        maxLS = glm::max(maxLS, glm::vec3(ls));
+    }
+
+    // Make it square to stabilize
+    float extentX = maxLS.x - minLS.x;
+    float extentY = maxLS.y - minLS.y;
+    float maxExtent = std::max(extentX, extentY);
+
+    float cx = 0.5f * (minLS.x + maxLS.x);
+    float cy = 0.5f * (minLS.y + maxLS.y);
+
+    minLS.x = cx - 0.5f * maxExtent;
+    maxLS.x = cx + 0.5f * maxExtent;
+    minLS.y = cy - 0.5f * maxExtent;
+    maxLS.y = cy + 0.5f * maxExtent;
+
+    // Snap to texel grid (reduces shimmering)
+    float texel = maxExtent / float(shadowSize);
+    minLS.x = std::floor(minLS.x / texel) * texel;
+    minLS.y = std::floor(minLS.y / texel) * texel;
+    maxLS.x = minLS.x + texel * float(shadowSize);
+    maxLS.y = minLS.y + texel * float(shadowSize);
+
+    // Z range (add margin)
+// In GLM lookAt space, forward is -Z, so points in front have NEGATIVE z.
+// glm::ortho expects zNear/zFar as positive distances along the view direction.
+// Convert lightView-space z bounds to positive near/far.
+    float zMargin = 50.0f;
+
+    // maxLS.z is "closest" (least negative), minLS.z is "farthest" (most negative)
+    float nearPlane = std::max(0.1f, -maxLS.z - zMargin);
+    float farPlane = std::max(nearPlane + 1.0f, -minLS.z + zMargin);
+
+    glm::mat4 lightProj = glm::ortho(minLS.x, maxLS.x, minLS.y, maxLS.y, nearPlane, farPlane);
+    return lightProj * lightView;
 }
 
 // Icons
@@ -1221,6 +1337,37 @@ int main() {
         pipeline.BeginPickingPass(vw, vh, editorCam.GetCamera());
         scene.OnRenderPicking(editorCam.GetCamera(), pipeline.GetIDMaterial());
         pipeline.EndPickingPass();
+
+        // --- Build CSM + render shadow maps (Editor) ---
+        static constexpr int CSM_CASCADES = 4;
+        static constexpr uint32_t SHADOW_SIZE = 2048;
+
+        glm::vec3 lightDir, lightColor;
+        bool hasLight = scene.GetMainDirectionalLight(lightDir, lightColor);
+        if (!hasLight) { lightDir = { 0.4f,0.8f,-0.3f }; lightColor = { 1,1,1 }; }
+
+        glm::mat4 lightMats[CSM_CASCADES];
+        float splits[CSM_CASCADES] = { 15.0f, 40.0f, 90.0f, 200.0f };
+
+        // clamp last split to camera far
+        const PerspectiveCamera& pc = editorCam.GetCamera();
+        splits[CSM_CASCADES - 1] = std::min(splits[CSM_CASCADES - 1], pc.GetFarClip());
+
+        for (int i = 0; i < CSM_CASCADES; i++) {
+            float sliceNear = (i == 0) ? pc.GetNearClip() : splits[i - 1];
+            float sliceFar = splits[i];
+
+            lightMats[i] = BuildCascadeLightMatrix(pc, lightDir, sliceNear, sliceFar, SHADOW_SIZE);
+        }
+
+        for (int i = 0; i < CSM_CASCADES; i++) {
+            pipeline.BeginShadowPass(SHADOW_SIZE, lightMats[i], (uint32_t)i, CSM_CASCADES);
+            scene.OnRenderShadow(pipeline.GetShadowDepthMaterial());
+            pipeline.EndShadowPass();
+        }
+
+        // IMPORTANT: bind the result for Lit.glsl
+        Renderer::SetCSMShadowMap(pipeline.GetShadowDepthTextureArray(), lightMats, splits, CSM_CASCADES);
 
         pipeline.BeginScenePass(vw, vh, editorCam.GetCamera());
 
