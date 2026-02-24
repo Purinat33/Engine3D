@@ -10,6 +10,8 @@
 #include "Engine/Renderer/Material.h"
 #include "Engine/Renderer/PerspectiveCamera.h"
 
+#include "Engine/Renderer/Frustum.h"
+
 #include <cmath>
 
 namespace Engine {
@@ -77,6 +79,8 @@ namespace Engine {
             Renderer::SetDirectionalLight(glm::vec3(0.4f, 0.8f, -0.3f), glm::vec3(1.0f));
         }
 
+        Engine::Frustum fr = Engine::ExtractFrustum(camera.GetViewProjection());
+
         // --- Render meshes (submit only; pipeline owns BeginScene/EndScene) ---
         auto renderView = m_Registry.view<TransformComponent, MeshRendererComponent>();
         renderView.each([&](auto /*entity*/, TransformComponent& tc, MeshRendererComponent& mrc) {
@@ -86,6 +90,23 @@ namespace Engine {
             if (!model) return;
 
             glm::mat4 world = tc.GetTransform();
+
+            auto maxScale = std::max(tc.Scale.x, std::max(tc.Scale.y, tc.Scale.z));
+
+            for (const auto& sm : model->GetSubMeshes()) {
+                if (!sm.MeshPtr || !sm.MaterialPtr) continue;
+
+                const auto& b = sm.MeshPtr->GetBounds();
+
+                // world center = world * local center
+                glm::vec3 worldCenter = glm::vec3(world * glm::vec4(b.Center, 1.0f));
+                float worldRadius = b.Radius * maxScale;
+
+                if (!Engine::SphereInFrustum(fr, worldCenter, worldRadius))
+                    continue;
+
+                Renderer::Submit(sm.MaterialPtr, sm.MeshPtr->GetVertexArray(), world);
+            }
 
             for (const auto& sm : model->GetSubMeshes()) {
                 if (!sm.MeshPtr || !sm.MaterialPtr) continue;

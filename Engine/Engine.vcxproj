@@ -166,6 +166,7 @@
     <ClInclude Include="include\Engine\Renderer\Buffer.h" />
     <ClInclude Include="include\Engine\Renderer\CameraController.h" />
     <ClInclude Include="include\Engine\Renderer\Framebuffer.h" />
+    <ClInclude Include="include\Engine\Renderer\Frustum.h" />
     <ClInclude Include="include\Engine\Renderer\Material.h" />
     <ClInclude Include="include\Engine\Renderer\Mesh.h" />
     <ClInclude Include="include\Engine\Renderer\Model.h" />
